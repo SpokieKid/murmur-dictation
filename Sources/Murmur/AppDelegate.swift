@@ -17,29 +17,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var warnedNoAccessibility = false
 
     private enum State { case idle, recording, working }
-    private var state: State = .idle
+
+    /// A single microphone capture. Murmur only records one take at a time, but
+    /// once this context is handed to a `ProcessingJob` the recorder is free to
+    /// start the next take while the previous one transcribes in parallel.
+    private struct RecordingContext {
+        let id: Int
+        let sequence: Int
+        let chainID: Int
+        let realtime: RealtimeTranscriber?
+    }
+
+    private enum JobOutcome {
+        case success(String)
+        case failure(String)
+        case cancelled
+    }
+
+    private final class ProcessingJob {
+        let id: Int
+        let sequence: Int
+        let chainID: Int
+        let realtime: RealtimeTranscriber?
+        var outcome: JobOutcome?
+        var task: Task<Void, Never>?
+        var watchdog: DispatchWorkItem?
+
+        init(id: Int, sequence: Int, chainID: Int, realtime: RealtimeTranscriber?) {
+            self.id = id
+            self.sequence = sequence
+            self.chainID = chainID
+            self.realtime = realtime
+        }
+    }
+
+    private var currentRecording: RecordingContext?
+    private var isRequestingMicrophone = false
+    private var nextJobID = 0
+    private var nextChainID = 0
+    private var latestChainID = 0
+    private var chainsWithDeliveredText: Set<Int> = []
+    private var processingJobs: [Int: ProcessingJob] = [:]
+    /// Valid takes in capture order. A later result can finish first, but it is
+    /// held here until every earlier entry has been delivered or skipped.
+    private var deliveryOrder: [Int] = []
+    private var deliveryBusy = false
+
+    private var state: State {
+        if currentRecording != nil || recorder.isRecording { return .recording }
+        if !processingJobs.isEmpty || deliveryBusy { return .working }
+        return .idle
+    }
     private var minDuration = 0.4
     private var playedLimitWarning = false
-
-    /// Bumped whenever a dictation's processing starts or ends. A background
-    /// transcription Task captures the value at launch and only delivers if it's
-    /// still current, so a result arriving after a stall-watchdog reset (or a
-    /// newer dictation) is discarded instead of pasting late.
-    private var workID = 0
     /// Stage timing for diagnosing perceived latency. Read with:
     /// `log show --predicate 'subsystem == "com.murmur.dictation"' --style compact --last 10m`
     private let perfLog = Logger(subsystem: "com.murmur.dictation", category: "timing")
-    /// The in-flight transcribe/polish work, held so Escape can cancel it.
-    private var workTask: Task<Void, Never>?
-    /// Fires if a dictation stays in `.working` far longer than the network
-    /// timeouts allow, so the app can never be left permanently frozen needing a
-    /// restart — the historical failure mode after the app sat idle.
-    private var stallWatchdog: DispatchWorkItem?
-
-    /// Set only when streaming ASR successfully connects for the current
-    /// recording; nil means "use the batch WAV path", which also covers the
-    /// realtime connection failing to start.
-    private var realtimeTranscriber: RealtimeTranscriber?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Defaults.registerDefaults()
@@ -120,17 +153,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     // MARK: - Dictation flow
 
     @objc private func toggleDictation() {
-        if state == .recording { endDictation() } else { beginDictation() }
+        if currentRecording != nil || recorder.isRecording {
+            endDictation()
+        } else {
+            beginDictation()
+        }
     }
 
     private func beginDictation() {
-        guard state == .idle else { return }
+        // Processing jobs no longer block the microphone. The only invalid
+        // overlap is a second capture (or a second permission callback) while a
+        // recording is already being started.
+        guard currentRecording == nil, !recorder.isRecording, !isRequestingMicrophone else { return }
+        let chainID: Int
+        if state == .working, latestChainID != 0 {
+            chainID = latestChainID
+        } else {
+            nextChainID &+= 1
+            latestChainID = nextChainID
+            chainID = latestChainID
+            chainsWithDeliveredText.removeAll()
+        }
+        isRequestingMicrophone = true
         Permissions.requestMicrophone { [weak self] granted in
             guard let self = self else { return }
+            self.isRequestingMicrophone = false
             guard granted else { self.notify("Microphone access denied"); return }
+            guard self.currentRecording == nil, !self.recorder.isRecording else { return }
+
+            self.nextJobID &+= 1
+            let id = self.nextJobID
+            let sequence = id
+            let asrConfig = Defaults.config()
+            var realtime: RealtimeTranscriber?
             do {
                 self.recorder.deviceUID = Defaults.micUID
-                self.recorder.onLevel = { [weak self] level in self?.hud.update(level: level) }
+                self.recorder.onLevel = { [weak self] level in self?.hud.update(id: id, level: level) }
                 self.playedLimitWarning = false
                 self.recorder.maxDuration = Defaults.maxRecordingSeconds()
                 self.recorder.warnLeadSeconds = Defaults.recordingWarnLeadSeconds
@@ -138,25 +196,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     self?.handleApproachingLimit(remaining)
                 }
                 self.recorder.onLimitReached = { [weak self] in self?.handleRecordingLimitReached() }
+
+                if Defaults.useRealtimeASR {
+                    realtime = self.startRealtimeASR(config: asrConfig)
+                }
                 try self.recorder.start()
-                self.state = .recording
-                self.render(.recording)
+                self.currentRecording = RecordingContext(
+                    id: id,
+                    sequence: sequence,
+                    chainID: chainID,
+                    realtime: realtime
+                )
+                self.refreshActivity()
                 // Escape aborts the take; live only for the duration of a dictation
                 // so the key keeps working normally everywhere else.
-                self.escape.start()
-                if Defaults.showWaveform { self.hud.show(status: "Listening… ⎋ 取消") }
+                if Defaults.showWaveform {
+                    self.hud.start(id: id, sequence: sequence, status: "Listening… ⎋ 取消")
+                }
                 if Defaults.playSounds { NSSound(named: "Tink")?.play() }
                 // Warm the ASR/LLM connections while the user is still
                 // speaking, so the TCP/TLS handshake doesn't land on the
                 // critical path after they release the hotkey.
-                let asrConfig = Defaults.config()
                 Transcriber.prewarm(config: asrConfig)
                 if let llmConfig = Defaults.llmConfig() { LLMRefiner.prewarm(config: llmConfig) }
-
-                if Defaults.useRealtimeASR {
-                    self.startRealtimeASR(config: asrConfig)
-                }
             } catch {
+                realtime?.cancel()
+                self.clearRecorderCallbacks()
+                self.refreshActivity()
                 self.notify("Recording failed: \(error.localizedDescription)")
             }
         }
@@ -168,70 +234,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// `RealtimeTranscriber` buffers internally until it's actually ready. If
     /// the connection never comes up, `finish()` reports that and
     /// `endDictation` falls back to the batch WAV path that was recording anyway.
-    private func startRealtimeASR(config: Transcriber.Config) {
+    private func startRealtimeASR(config: Transcriber.Config) -> RealtimeTranscriber {
         let rt = RealtimeTranscriber()
-        realtimeTranscriber = rt
         recorder.onPCMChunk = { [weak rt] chunk in rt?.append(chunk) }
         Task {
             let vocabId = await VocabularyManager.vocabularyId(for: Defaults.vocabularyTerms, apiKey: config.apiKey)
             rt.beginConnecting(config: .init(apiKey: config.apiKey, language: config.language, vocabularyId: vocabId))
         }
+        return rt
     }
 
     private func endDictation() {
-        guard state == .recording else { return }
-        recorder.onLevel = nil
-        recorder.onApproachingLimit = nil
-        recorder.onLimitReached = nil
-        recorder.onPCMChunk = nil
+        guard let recording = currentRecording else { return }
+        clearRecorderCallbacks()
         let wav = recorder.stop()
         let seconds = recorder.duration
         let buffers = recorder.bufferCount
         let peak = recorder.peakLevel
-        // Deliberately left set: Escape must still be able to tear the socket
-        // down mid-transcription. `finishWorking` clears it on every exit path.
-        let realtime = realtimeTranscriber
-        state = .working
-        render(.working)
+        currentRecording = nil
         if Defaults.playSounds { NSSound(named: "Pop")?.play() }
 
         // Empty / silent / too-short capture → quietly cancel with a brief HUD
         // hint. No modal alert, and don't waste an ASR call on silence.
         if buffers == 0 {
-            finishWorking(flash: "未检测到麦克风输入")
+            recording.realtime?.cancel()
+            hud.finish(id: recording.id, message: "未检测到麦克风输入", style: .failure)
+            refreshActivity()
             return
         }
         if seconds < minDuration || peak < 0.006 {
-            finishWorking(flash: "未检测到语音")
+            recording.realtime?.cancel()
+            hud.finish(id: recording.id, message: "未检测到语音", style: .failure)
+            refreshActivity()
             return
         }
 
-        hud.setProcessing("Transcribing…")
+        let job = ProcessingJob(
+            id: recording.id,
+            sequence: recording.sequence,
+            chainID: recording.chainID,
+            realtime: recording.realtime
+        )
+        processingJobs[job.id] = job
+        deliveryOrder.append(job.id)
+        hud.setProcessing(id: job.id, status: "Transcribing…")
+        refreshActivity()
+
         let config = Defaults.config()
         let llmConfig = Defaults.llmConfig()
-        workID &+= 1
-        let currentWork = workID
-        scheduleStallWatchdog(for: currentWork)
-        workTask = Task { [self] in
+        scheduleStallWatchdog(for: job)
+        job.task = Task { [weak self, weak job] in
+            guard let self, let job else { return }
             let t0 = Date()
-            let result: Result<String, Error>
             do {
                 var text: String
                 let path: String
-                if let realtime, let realtimeText = await realtime.finish() {
+                if let realtime = job.realtime, let realtimeText = await realtime.finish() {
                     text = realtimeText
                     path = "stream"
                 } else {
                     text = try await Transcriber.transcribe(wav: wav, config: config)
-                    path = realtime == nil ? "batch" : "batch(stream-fell-back)"
+                    path = job.realtime == nil ? "batch" : "batch(stream-fell-back)"
                 }
+                try Task.checkCancellation()
                 let tAsr = Date()
-                perfLog.notice("asr path=\(path, privacy: .public) dt=\(tAsr.timeIntervalSince(t0), format: .fixed(precision: 2))s chars=\(text.count)")
+                self.perfLog.notice("asr job=\(job.sequence) path=\(path, privacy: .public) dt=\(tAsr.timeIntervalSince(t0), format: .fixed(precision: 2))s chars=\(text.count)")
                 if let llmConfig = llmConfig, !text.isEmpty {
                     let isLongDictation = seconds >= 60 || text.count >= 600
                     await MainActor.run {
-                        self.hud.setProcessing(
-                            isLongDictation ? "Polishing long dictation…" : "Polishing…"
+                        self.updateJobStage(
+                            job.id,
+                            status: isLongDictation ? "Polishing long dictation…" : "Polishing…"
                         )
                     }
                     if let polished = await LLMRefiner.refine(
@@ -241,23 +314,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     ) {
                         text = polished
                     }
-                    perfLog.notice("polish dt=\(Date().timeIntervalSince(tAsr), format: .fixed(precision: 2))s")
+                    try Task.checkCancellation()
+                    self.perfLog.notice("polish job=\(job.sequence) dt=\(Date().timeIntervalSince(tAsr), format: .fixed(precision: 2))s")
                 }
-                perfLog.notice("pipeline total dt=\(Date().timeIntervalSince(t0), format: .fixed(precision: 2))s")
-                result = .success(text)
+                self.perfLog.notice("pipeline job=\(job.sequence) total dt=\(Date().timeIntervalSince(t0), format: .fixed(precision: 2))s")
+                try Task.checkCancellation()
+                let completedText = text
+                await MainActor.run { self.completeJob(job.id, outcome: .success(completedText)) }
             } catch {
-                result = .failure(error)
-            }
-            await MainActor.run {
-                // Discard if a stall-watchdog reset or a newer dictation already
-                // superseded this one (otherwise a late result would paste itself).
-                guard self.workID == currentWork else { return }
-                switch result {
-                case .success(let text):
-                    self.deliver(text)
-                case .failure(let error):
-                    self.notify(error.localizedDescription)
-                    self.finishWorking()
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self.completeJob(job.id, outcome: .failure(error.localizedDescription))
                 }
             }
         }
@@ -265,26 +332,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     /// Escape pressed mid-dictation: throw this take away.
     ///
-    /// While recording we stop capture and never call the ASR at all. While
-    /// transcribing/polishing we cancel the in-flight request — and even if it
-    /// has already completed, the `workID` guard stops its result from being
-    /// pasted after the fact.
+    /// While recording we stop capture and never call the ASR at all. With only
+    /// processing cards visible, Escape cancels the newest undelivered job; its
+    /// outcome marker ensures a late network response cannot paste afterward.
     private func cancelDictation() {
-        switch state {
-        case .idle:
-            return
-        case .recording:
-            recorder.onLevel = nil
-            recorder.onApproachingLimit = nil
-            recorder.onLimitReached = nil
-            recorder.onPCMChunk = nil
+        if let recording = currentRecording {
+            clearRecorderCallbacks()
             _ = recorder.stop() // audio is dropped on the floor; no ASR call at all
+            recording.realtime?.cancel()
+            currentRecording = nil
             if Defaults.playSounds { NSSound(named: "Bottle")?.play() }
-            finishWorking(flash: "✗ 已取消")
-        case .working:
-            workTask?.cancel()
-            if Defaults.playSounds { NSSound(named: "Bottle")?.play() }
-            finishWorking(flash: "✗ 已取消")
+            hud.finish(id: recording.id, message: "✗ 已取消", style: .cancelled)
+            refreshActivity()
+            return
+        }
+
+        // With a stack of in-flight jobs, Escape cancels the newest undelivered
+        // one. Earlier jobs continue, preserving the visible stack/order model.
+        for id in deliveryOrder.reversed() {
+            guard let job = processingJobs[id] else { continue }
+            switch job.outcome {
+            case nil, .success?:
+                job.task?.cancel()
+                job.task = nil
+                job.watchdog?.cancel()
+                job.watchdog = nil
+                job.realtime?.cancel()
+                job.outcome = .cancelled
+                if Defaults.playSounds { NSSound(named: "Bottle")?.play() }
+                hud.finish(id: id, message: "✗ 已取消", style: .cancelled)
+                drainDeliveryQueue()
+                return
+            case .failure?, .cancelled?:
+                continue
+            }
         }
     }
 
@@ -292,9 +373,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// live countdown on the HUD (and a one-time chime) so the user can wrap up
     /// before capture auto-stops.
     private func handleApproachingLimit(_ remaining: Int) {
-        guard state == .recording else { return }
+        guard let recording = currentRecording else { return }
         if Defaults.showWaveform {
-            hud.warn("⚠️ \(remaining) 秒后自动停止录音")
+            hud.warn(id: recording.id, status: "⚠️ \(remaining) 秒后自动停止录音")
         }
         if !playedLimitWarning {
             playedLimitWarning = true
@@ -305,56 +386,160 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// The cap was hit — stop capture and transcribe what we have, rather than
     /// letting an over-length take fail the ASR request.
     private func handleRecordingLimitReached() {
-        guard state == .recording else { return }
+        guard currentRecording != nil else { return }
         endDictation()
     }
 
-    /// Saves the transcript to history, pastes it (or falls back to clipboard),
-    /// and flashes a confirmation on the HUD.
-    private func deliver(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            finishWorking()
+    private func clearRecorderCallbacks() {
+        recorder.onLevel = nil
+        recorder.onApproachingLimit = nil
+        recorder.onLimitReached = nil
+        recorder.onPCMChunk = nil
+    }
+
+    private func updateJobStage(_ id: Int, status: String) {
+        guard let job = processingJobs[id], job.outcome == nil else { return }
+        hud.setProcessing(id: id, status: status)
+    }
+
+    private func completeJob(_ id: Int, outcome: JobOutcome) {
+        guard let job = processingJobs[id], job.outcome == nil else { return }
+        job.watchdog?.cancel()
+        job.watchdog = nil
+        job.task = nil
+        job.outcome = outcome
+
+        switch outcome {
+        case .success:
+            // `drainDeliveryQueue` either pastes this immediately or marks it as
+            // waiting when an earlier parallel request is still in flight.
+            break
+        case .failure(let message):
+            let oneLine = message.replacingOccurrences(of: "\n", with: " ")
+            let short = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
+            hud.finish(id: id, message: "✗ \(short)", style: .failure)
+        case .cancelled:
+            hud.finish(id: id, message: "✗ 已取消", style: .cancelled)
+        }
+
+        drainDeliveryQueue()
+    }
+
+    /// Delivers every completed head-of-line job, while holding later results
+    /// until their predecessors finish. A short gap keeps consecutive synthetic
+    /// paste events from racing each other in the target app.
+    private func drainDeliveryQueue() {
+        guard !deliveryBusy else {
+            markCompletedJobsWaiting()
             return
         }
+
+        while let id = deliveryOrder.first {
+            guard let job = processingJobs[id] else {
+                deliveryOrder.removeFirst()
+                continue
+            }
+            guard let outcome = job.outcome else {
+                markCompletedJobsWaiting()
+                refreshActivity()
+                return
+            }
+
+            deliveryOrder.removeFirst()
+            switch outcome {
+            case .success(let text):
+                processingJobs.removeValue(forKey: id)
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
+                    hud.finish(id: id, message: "未识别到文字", style: .failure)
+                    continue
+                }
+
+                deliveryBusy = true
+                let isContinuation = chainsWithDeliveredText.contains(job.chainID)
+                let insertionText = isContinuation ? textWithContinuationSeparator(trimmed) : trimmed
+                let pasted = deliver(transcript: trimmed, insertionText: insertionText)
+                chainsWithDeliveredText.insert(job.chainID)
+                hud.finish(
+                    id: id,
+                    message: pasted ? "✓ 已粘贴" : "✓ 已复制 · ⌘V",
+                    style: .success
+                )
+                refreshActivity()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    guard let self else { return }
+                    self.deliveryBusy = false
+                    self.drainDeliveryQueue()
+                }
+                return
+
+            case .failure, .cancelled:
+                processingJobs.removeValue(forKey: id)
+            }
+        }
+
+        refreshActivity()
+    }
+
+    private func markCompletedJobsWaiting() {
+        for id in deliveryOrder {
+            guard case .success? = processingJobs[id]?.outcome else { continue }
+            hud.setWaiting(id: id, status: "等待前序任务…")
+        }
+    }
+
+    /// Saves the transcript to history and pastes it (or falls back to the
+    /// clipboard). HUD completion is per-job and handled by the ordered drain.
+    @discardableResult
+    private func deliver(transcript: String, insertionText: String) -> Bool {
+        let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
         TranscriptHistory.add(trimmed)
-        let pasted = TextInjector.insert(trimmed)
-        finishWorking(flash: pasted ? "✓ 已粘贴" : "✓ 已复制 · ⌘V")
+        let pasted = TextInjector.insert(insertionText)
 
         if !pasted, !warnedNoAccessibility {
             warnedNoAccessibility = true
             notify("结果已复制到剪贴板，按 ⌘V 即可粘贴。\n\n要让 Murmur 自动粘贴到光标处，请在 系统设置 → 隐私与安全性 → 辅助功能 里勾选 Murmur（菜单「Grant Permissions…」可直达），然后重启 App。\n\n所有转录都能在菜单「Recent Transcripts」里查看。")
         }
+        return pasted
     }
 
-    private func finishWorking(flash: String? = nil) {
-        stallWatchdog?.cancel()
-        stallWatchdog = nil
-        workTask = nil
-        // Close the streaming socket on every exit path — normal finish already
-        // closed it, but a cancelled/aborted take would otherwise leave it open.
-        realtimeTranscriber?.cancel()
-        realtimeTranscriber = nil
-        escape.stop()  // Escape goes back to being the app's own key
-        workID &+= 1  // invalidate any in-flight processing so a late result is ignored
-        state = .idle
-        render(.idle)
-        if let flash = flash { hud.finish(flash) } else { hud.hide() }
+    /// Separate consecutive English/ASCII additions with one space while
+    /// leaving CJK text and leading closing punctuation naturally adjacent.
+    private func textWithContinuationSeparator(_ text: String) -> String {
+        guard let first = text.first, !first.isWhitespace else { return text }
+        let attachesToPrevious = ",.!?;:)]}，。！？；：、".contains(first)
+        guard first.isASCII, !attachesToPrevious else { return text }
+        return " " + text
     }
 
-    /// Arms a fallback that force-recovers this dictation if it never completes.
-    /// The per-request network timeouts should always make the Task finish first;
-    /// this only trips on a true hang so the UI can't get wedged in `.working`.
-    private func scheduleStallWatchdog(for work: Int) {
-        stallWatchdog?.cancel()
-        let item = DispatchWorkItem { [weak self] in self?.recoverFromStall(work) }
-        stallWatchdog = item
+    private func refreshActivity() {
+        render(state)
+        if currentRecording != nil || !processingJobs.isEmpty {
+            escape.start()
+        } else {
+            escape.stop()
+        }
+    }
+
+    /// Arms an independent fallback for each parallel request. One stalled job
+    /// can time out without cancelling newer jobs that are still making progress.
+    private func scheduleStallWatchdog(for job: ProcessingJob) {
+        let id = job.id
+        let item = DispatchWorkItem { [weak self] in self?.recoverFromStall(id) }
+        job.watchdog = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 120, execute: item)
     }
 
-    private func recoverFromStall(_ work: Int) {
-        guard state == .working, workID == work else { return }
-        finishWorking(flash: "转录超时，请重试")
+    private func recoverFromStall(_ id: Int) {
+        guard let job = processingJobs[id], job.outcome == nil else { return }
+        job.task?.cancel()
+        job.task = nil
+        job.watchdog = nil
+        job.realtime?.cancel()
+        job.outcome = .failure("转录超时，请重试")
+        hud.finish(id: id, message: "转录超时，请重试", style: .failure)
+        drainDeliveryQueue()
     }
 
     // MARK: - Menus

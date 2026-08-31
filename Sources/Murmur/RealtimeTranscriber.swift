@@ -46,10 +46,15 @@ final class RealtimeTranscriber {
     /// the handshake (which, on a flaky connection, can take long enough to
     /// swallow the first sentence of a dictation).
     func beginConnecting(config: Config) {
+        // Vocabulary lookup happens before this call. The user may have already
+        // cancelled that take during the lookup, in which case `cancel()` has
+        // marked the session finished and no socket should open afterward.
+        guard !lock.withLock({ finished }) else { return }
         connectTask = Task { try await self.connect(config: config) }
     }
 
     private func connect(config: Config) async throws {
+        guard !lock.withLock({ finished }) else { throw CancellationError() }
         guard !config.apiKey.isEmpty else { throw RealtimeError.notConfigured }
 
         var req = URLRequest(url: Self.endpoint)
@@ -130,7 +135,14 @@ final class RealtimeTranscriber {
     /// to a different transcription path in that case.
     func finish() async -> String? {
         _ = try? await connectTask?.value // make sure connect (success or failure) has resolved
-        guard lock.withLock({ ready }), let ws = socket else { return nil }
+        guard lock.withLock({ ready }), let ws = socket else {
+            // `beginConnecting` may still be waiting on the async vocabulary
+            // lookup outside this object. Mark this take closed so that delayed
+            // callback cannot open an orphan WebSocket after batch fallback has
+            // already started.
+            lock.withLock { finished = true }
+            return nil
+        }
 
         let finishMsg: [String: Any] = [
             "header": ["action": "finish-task", "task_id": taskId, "streaming": "duplex"],

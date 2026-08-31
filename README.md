@@ -14,11 +14,16 @@ and start talking.
 ## Features
 
 - 🎙️ **Push-to-talk dictation** — hold a key, speak, release; text appears at the cursor.
+- ⚡️ **Keep talking while Murmur works** — press the trigger again (including Fn) while
+  earlier audio is still transcribing or polishing. Takes run in parallel, then paste in
+  the exact order they were recorded.
+- 🗂️ **Stacked task HUD** — every active recording / transcription gets its own animated
+  card, stacked above the original floating waveform so parallel progress stays visible.
 - 🌊 **Live waveform** — a floating pill near the bottom of the screen reacts to your
   voice while recording, then shows "Transcribing…" / "Polishing…".
-- ⎋ **Esc to cancel** — press Esc while recording (or while it's still transcribing /
-  polishing) to throw the take away: no ASR call, nothing pasted. Esc is swallowed
-  *only* for the duration of a dictation, so it keeps working normally everywhere else.
+- ⎋ **Esc to cancel** — while recording, Esc drops the active take before any ASR call.
+  When several cards are processing, Esc cancels the newest undelivered one while earlier
+  jobs continue. Esc is swallowed only while Murmur has an active job.
 - ✨ **LLM polish** — Qwen3.8 Flash cleans punctuation and removes filler
   words ("um", "嗯", "那个") from the raw transcript.
 - 🗣️ **Voice self-edit** — correct yourself out loud and the fix is applied, not typed:
@@ -36,10 +41,13 @@ and start talking.
 
 ## How it works
 
-1. **Hold** the push-to-talk key (default: **Right ⌥ Option**) and speak — a waveform
-   pill appears and reacts to your voice.
-2. **Release** — Murmur captures 16 kHz mono audio, sends it to your ASR endpoint,
-   optionally polishes the transcript with an LLM, and pastes it at the cursor (⌘V).
+1. **Press** the trigger key (default: **Right ⌥ Option**) and speak — a waveform pill
+   appears and reacts to your voice. Press again to stop, or choose hold-to-talk in Settings.
+2. **Stop** — Murmur captures 16 kHz mono audio and starts ASR / optional LLM polish.
+3. **Keep going immediately** — while that card is processing, press the trigger again
+   and record another thought. Each take processes concurrently.
+4. **Ordered paste** — even if a later take finishes first, it waits for earlier takes;
+   results are inserted at the cursor in recording order (⌘V).
 
 It lives in the menu bar (🎙️). No Dock icon, no window unless you open Settings.
 

@@ -169,7 +169,7 @@ struct SettingsView: View {
                 Toggle("Play start/stop sounds", isOn: $playSounds)
             }
             Section {
-                Text("Hold the push-to-talk key, speak, then release. Needs Microphone, Accessibility and Input Monitoring permissions — use “Grant Permissions…” in the menu.")
+                Text("转写或润色仍在处理中时，不用等待：继续按所选触发键（包括 Fn）即可录下一段。多个任务会并行处理，并严格按录音顺序粘贴。需要麦克风、辅助功能与输入监控权限。")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
