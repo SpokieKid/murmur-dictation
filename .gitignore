@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Local build and distribution artifacts
+build/
+*.app
+*.dmg
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
