@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2eee6" />
+    <title>Murmur Logo System</title>
+    <style>
+      :root {
+        --paper: #f2eee6;
+        --paper-light: #faf8f3;
+        --ink: #151618;
+        --muted: #6c6962;
+        --red: #f03a2f;
+        --line: rgba(21, 22, 24, 0.14);
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--paper); }
+
+      body {
+        width: min(1240px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 34px 0 80px;
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      }
+
+      .topbar,
+      .hero,
+      .idea-grid,
+      .usage-grid,
+      .palette,
+      .asset-row {
+        display: flex;
+      }
+
+      .topbar {
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        font-weight: 760;
+        letter-spacing: .11em;
+      }
+
+      .version {
+        color: var(--muted);
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+
+      .hero {
+        min-height: 610px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 7vw;
+        padding: 72px 5vw;
+      }
+
+      .hero-copy { max-width: 570px; }
+
+      .kicker {
+        margin: 0 0 18px;
+        color: var(--red);
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: .1em;
+      }
+
+      h1 {
+        max-width: 8em;
+        margin: 0;
+        font-size: clamp(54px, 7.2vw, 104px);
+        font-weight: 850;
+        letter-spacing: -.07em;
+        line-height: .94;
+      }
+
+      .hero-copy > p:last-child {
+        max-width: 27em;
+        margin: 28px 0 0;
+        color: var(--muted);
+        font-size: 18px;
+        font-weight: 560;
+        line-height: 1.6;
+      }
+
+      .icon-stage {
+        display: grid;
+        width: min(34vw, 390px);
+        min-width: 300px;
+        aspect-ratio: 1;
+        place-items: center;
+      }
+
+      .icon-stage img {
+        width: 100%;
+        filter: drop-shadow(0 28px 42px rgba(21, 22, 24, .14));
+      }
+
+      section { margin-top: 18px; }
+
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        background: rgba(250, 248, 243, .66);
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: 1fr 2fr;
+        gap: 32px;
+        padding: 34px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .section-number {
+        color: var(--red);
+        font-size: 15px;
+        font-weight: 820;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: clamp(28px, 4vw, 54px);
+        letter-spacing: -.05em;
+        line-height: 1;
+      }
+
+      .idea-grid { align-items: stretch; }
+
+      .idea {
+        flex: 1;
+        min-height: 230px;
+        padding: 32px;
+        border-right: 1px solid var(--line);
+      }
+
+      .idea:last-child { border-right: 0; }
+
+      .idea strong {
+        display: block;
+        margin-bottom: 13px;
+        font-size: 22px;
+        letter-spacing: -.03em;
+      }
+
+      .idea p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.6;
+      }
+
+      .idea-visual {
+        position: relative;
+        display: grid;
+        width: 100%;
+        height: 80px;
+        margin-bottom: 24px;
+        place-items: center start;
+      }
+
+      .idea-visual img { width: 108px; }
+
+      .label {
+        position: absolute;
+        right: 0;
+        padding: 5px 9px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+      }
+
+      .label:first-of-type { top: 4px; }
+      .label:last-of-type { bottom: 4px; }
+
+      .stack-lines { display: grid; width: 100%; gap: 9px; }
+      .stack-lines i { display: block; height: 10px; border-radius: 999px; background: var(--ink); }
+      .stack-lines i:first-child { width: 72%; background: var(--red); }
+      .stack-lines i:nth-child(2) { width: 88%; }
+      .stack-lines i:nth-child(3) { width: 58%; opacity: .22; }
+
+      .cursor-demo { display: flex; align-items: center; gap: 6px; font-size: 27px; font-weight: 780; letter-spacing: -.06em; }
+      .cursor-demo::after { width: 3px; height: 34px; background: var(--red); content: ""; animation: blink .9s steps(1) infinite; }
+
+      .wordmark-stage {
+        display: grid;
+        min-height: 300px;
+        place-items: center;
+        padding: 50px;
+        background: var(--paper-light);
+      }
+
+      .wordmark-stage img { width: min(680px, 90%); }
+
+      .usage-grid { display: grid; grid-template-columns: 1.3fr .7fr .7fr; }
+
+      .usage {
+        display: grid;
+        min-height: 290px;
+        place-items: center;
+        padding: 36px;
+        border-right: 1px solid var(--line);
+      }
+
+      .usage:last-child { border-right: 0; }
+      .usage img { width: min(150px, 70%); }
+      .usage.red { background: var(--red); }
+      .usage.dark { background: var(--ink); }
+      .usage.app img { width: min(220px, 85%); filter: drop-shadow(0 20px 25px rgba(21, 22, 24, .18)); }
+
+      .details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .detail-block { padding: 34px; }
+      .detail-block:first-child { border-right: 1px solid var(--line); }
+
+      .detail-block h3 {
+        margin: 0 0 24px;
+        font-size: 18px;
+      }
+
+      .palette { gap: 10px; }
+      .swatch { flex: 1; min-width: 0; }
+      .swatch-color { width: 100%; height: 92px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 16px; }
+      .swatch span { display: block; font-size: 12px; font-weight: 720; }
+      .swatch small { color: var(--muted); font-size: 11px; }
+
+      .asset-row { flex-wrap: wrap; gap: 8px; }
+      .asset {
+        padding: 10px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink);
+        font-size: 12px;
+        font-weight: 700;
+        text-decoration: none;
+        transition: background 160ms ease, color 160ms ease;
+      }
+      .asset:hover { background: var(--ink); color: #fff; }
+
+      footer {
+        padding: 34px 0 0;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+      }
+
+      @keyframes blink { 50% { opacity: 0; } }
+
+      @media (max-width: 760px) {
+        body { width: min(100% - 24px, 600px); padding-top: 20px; }
+        .hero { min-height: 0; flex-direction: column; align-items: flex-start; padding: 52px 14px; }
+        .icon-stage { width: 70%; min-width: 240px; align-self: center; }
+        .section-head { grid-template-columns: 1fr; }
+        .idea-grid, .details { display: block; }
+        .idea { min-height: 210px; border-right: 0; border-bottom: 1px solid var(--line); }
+        .idea:last-child { border-bottom: 0; }
+        .usage-grid { grid-template-columns: 1fr; }
+        .usage { border-right: 0; border-bottom: 1px solid var(--line); }
+        .usage:last-child { border-bottom: 0; }
+        .detail-block:first-child { border-right: 0; border-bottom: 1px solid var(--line); }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <span>MURMUR / LOGO SYSTEM</span>
+      <span class="version">01 · 2026</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="kicker">TWO VOICES. ONE FLOW.</p>
+          <h1>两路声音，<br />一路成文。</h1>
+          <p>你说的话，和会议另一边的声音，并行进入 Murmur，最终变成同一段清晰、连续的文字。</p>
+        </div>
+        <div class="icon-stage">
+          <img src="murmur-app-icon.svg" alt="Murmur 应用图标" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <span class="section-number">01 / IDEA</span>
+          <h2>不是麦克风。<br />是声音汇流。</h2>
+        </div>
+        <div class="idea-grid">
+          <article class="idea">
+            <div class="idea-visual">
+              <img src="murmur-mark.svg" alt="双声音来源" />
+              <span class="label">我的声音</span>
+              <span class="label">会议声音</span>
+            </div>
+            <strong>双音源</strong>
+            <p>朱红与近黑代表麦克风和电脑声音。它们并列存在，没有主次。</p>
+          </article>
+          <article class="idea">
+            <div class="idea-visual">
+              <div class="stack-lines" aria-hidden="true"><i></i><i></i><i></i></div>
+            </div>
+            <strong>持续说</strong>
+            <p>层叠线条来自转写任务 Stack：上一段处理中，下一段已经开始。</p>
+          </article>
+          <article class="idea">
+            <div class="idea-visual">
+              <div class="cursor-demo">一路成文</div>
+            </div>
+            <strong>有次序</strong>
+            <p>两条声流最终汇成一条水平线，象征文字按说话顺序进入输入框。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <span class="section-number">02 / WORDMARK</span>
+          <h2>克制，但不安静。</h2>
+        </div>
+        <div class="wordmark-stage">
+          <img src="murmur-wordmark.svg" alt="Murmur 横版字标" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <span class="section-number">03 / VERSIONS</span>
+          <h2>从 App Icon，<br />到一枚小小状态标。</h2>
+        </div>
+        <div class="usage-grid">
+          <div class="usage app"><img src="murmur-app-icon.svg" alt="Murmur App Icon" /></div>
+          <div class="usage red"><img src="murmur-mark-white.svg" alt="白色 Murmur 标志" /></div>
+          <div class="usage dark"><img src="murmur-mark-white.svg" alt="反白 Murmur 标志" /></div>
+        </div>
+      </section>
+
+      <section class="panel details">
+        <div class="detail-block">
+          <h3>品牌色</h3>
+          <div class="palette">
+            <div class="swatch"><div class="swatch-color" style="background:#F2EEE6"></div><span>Paper</span><small>#F2EEE6</small></div>
+            <div class="swatch"><div class="swatch-color" style="background:#151618"></div><span>Ink</span><small>#151618</small></div>
+            <div class="swatch"><div class="swatch-color" style="background:#F03A2F"></div><span>Voice</span><small>#F03A2F</small></div>
+          </div>
+        </div>
+        <div class="detail-block">
+          <h3>矢量资产</h3>
+          <div class="asset-row">
+            <a class="asset" href="murmur-mark.svg" download>主图形 SVG</a>
+            <a class="asset" href="murmur-wordmark.svg" download>横版字标 SVG</a>
+            <a class="asset" href="murmur-app-icon.svg" download>App Icon SVG</a>
+            <a class="asset" href="murmur-mark-monochrome.svg" download>单色版本 SVG</a>
+            <a class="asset" href="murmur-mark-white.svg" download>反白版本 SVG</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>Murmur — speak freely, keep the useful parts.</footer>
+  </body>
+</html>

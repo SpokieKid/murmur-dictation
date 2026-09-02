@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" role="img" aria-labelledby="title desc">
+  <title id="title">Murmur logo</title>
+  <desc id="desc">Murmur logo mark and wordmark.</desc>
+  <g transform="translate(14 16)">
+    <path d="M18 35H39C55 35 54 64 73 64" fill="none" stroke="#F03A2F" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M18 93H39C55 93 54 64 73 64H110" fill="none" stroke="#151618" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="168" y="108" fill="#151618" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="78" font-weight="700" letter-spacing="-4">Murmur</text>
+</svg>
