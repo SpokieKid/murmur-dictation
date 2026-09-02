@@ -1,0 +1,1169 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2eee6" />
+    <title>Murmur · 线上会议声音转文字演示</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f2eee6;
+        --paper-deep: #e9e2d7;
+        --ink: #151618;
+        --muted: #686761;
+        --red: #f03a2f;
+        --red-soft: #ffe2dc;
+        --green: #8cf0bc;
+        --green-ink: #0f6a3f;
+        --meeting: #202226;
+        --meeting-soft: #2a2d32;
+        --line: rgba(21, 22, 24, 0.13);
+        --shadow: 0 18px 55px rgba(20, 18, 15, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: grid;
+        min-height: 100dvh;
+        place-items: center;
+        overflow: hidden;
+        background: #111214;
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
+          "Helvetica Neue", Arial, sans-serif;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      .stage {
+        position: relative;
+        width: min(100vw, calc(100dvh * 9 / 16));
+        height: min(100dvh, calc(100vw * 16 / 9));
+        min-width: 320px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 8% 8%, rgba(240, 58, 47, 0.08), transparent 24%),
+          linear-gradient(145deg, #f7f3ec 0%, var(--paper) 60%, var(--paper-deep) 100%);
+        isolation: isolate;
+      }
+
+      .stage::before {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        opacity: 0.28;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.11'/%3E%3C/svg%3E");
+        content: "";
+        pointer-events: none;
+      }
+
+      .page {
+        display: grid;
+        height: 100%;
+        grid-template-rows: auto minmax(0, 0.92fr) minmax(0, 1.08fr);
+        gap: clamp(8px, 1.6vh, 18px);
+        padding: clamp(18px, 3.2vh, 42px) clamp(16px, 4.5vw, 42px)
+          clamp(14px, 2.4vh, 30px);
+      }
+
+      .masthead {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: 14px;
+      }
+
+      .eyebrow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: clamp(7px, 1vh, 12px);
+        font-size: clamp(10px, 1.25vh, 14px);
+        font-weight: 760;
+        letter-spacing: 0.12em;
+      }
+
+      .eyebrow-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--red);
+        box-shadow: 0 0 0 5px rgba(240, 58, 47, 0.12);
+      }
+
+      h1 {
+        max-width: 8.5em;
+        margin: 0;
+        font-size: clamp(27px, 4.3vh, 50px);
+        font-weight: 850;
+        letter-spacing: -0.065em;
+        line-height: 1.02;
+      }
+
+      h1 em {
+        color: var(--red);
+        font-style: normal;
+      }
+
+      .fullscreen-button {
+        display: grid;
+        width: clamp(34px, 4.4vh, 48px);
+        height: clamp(34px, 4.4vh, 48px);
+        place-items: center;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.48);
+        color: var(--ink);
+        cursor: pointer;
+        transition: transform 160ms ease, background 160ms ease;
+      }
+
+      .fullscreen-button:hover {
+        background: #fff;
+        transform: scale(1.04);
+      }
+
+      .meeting {
+        position: relative;
+        display: grid;
+        min-height: 0;
+        grid-template-rows: auto 1fr auto auto;
+        gap: clamp(7px, 1vh, 12px);
+        padding: clamp(12px, 1.8vh, 20px);
+        overflow: hidden;
+        border-radius: clamp(18px, 2.3vh, 28px);
+        background: var(--meeting);
+        box-shadow: var(--shadow);
+        color: #fff;
+      }
+
+      .meeting-bar,
+      .meeting-meta,
+      .participant-name,
+      .meeting-footer,
+      .source-row,
+      .source,
+      .controls,
+      .control-main,
+      .status-copy,
+      .queue-header,
+      .queue-source {
+        display: flex;
+        align-items: center;
+      }
+
+      .meeting-bar {
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .meeting-meta {
+        min-width: 0;
+        gap: 7px;
+        font-size: clamp(9px, 1.2vh, 13px);
+        font-weight: 680;
+      }
+
+      .live-dot {
+        width: 7px;
+        height: 7px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: var(--red);
+        animation: blink 1.4s ease-in-out infinite;
+      }
+
+      .meeting-time {
+        color: rgba(255, 255, 255, 0.55);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .participants {
+        display: grid;
+        min-height: 0;
+        grid-template-columns: repeat(2, 1fr);
+        gap: clamp(7px, 1vh, 12px);
+      }
+
+      .participant {
+        position: relative;
+        display: grid;
+        min-height: 0;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid transparent;
+        border-radius: clamp(13px, 1.8vh, 21px);
+        background: var(--meeting-soft);
+        color: #fff;
+        cursor: pointer;
+        transition:
+          border-color 220ms ease,
+          transform 220ms ease,
+          background 220ms ease;
+      }
+
+      .participant:hover {
+        background: #31343a;
+        transform: translateY(-1px);
+      }
+
+      .participant.speaking {
+        border-color: var(--green);
+        box-shadow: inset 0 0 0 1px var(--green);
+      }
+
+      .avatar {
+        display: grid;
+        width: clamp(43px, 6.2vh, 70px);
+        height: clamp(43px, 6.2vh, 70px);
+        place-items: center;
+        border-radius: 42% 48% 45% 50%;
+        font-size: clamp(24px, 3.4vh, 40px);
+        filter: saturate(0.92);
+        transform: rotate(-2deg);
+      }
+
+      .participant:nth-child(even) .avatar {
+        transform: rotate(2deg);
+      }
+
+      .avatar-rabbit {
+        background: #ffcabd;
+      }
+
+      .avatar-me {
+        background: #c9e3ff;
+      }
+
+      .avatar-bear {
+        background: #ffe0a1;
+      }
+
+      .avatar-fox {
+        background: #d6ccff;
+      }
+
+      .participant-name {
+        position: absolute;
+        right: 8px;
+        bottom: 7px;
+        left: 8px;
+        justify-content: space-between;
+        gap: 5px;
+        font-size: clamp(8px, 1.05vh, 12px);
+        font-weight: 650;
+      }
+
+      .you-badge {
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: var(--red);
+        font-size: 0.92em;
+        font-weight: 800;
+      }
+
+      .audio-bars {
+        display: flex;
+        height: 12px;
+        align-items: center;
+        gap: 2px;
+        opacity: 0;
+        transition: opacity 160ms ease;
+      }
+
+      .speaking .audio-bars {
+        opacity: 1;
+      }
+
+      .audio-bars i {
+        width: 2px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--green);
+        animation: sound 580ms ease-in-out infinite alternate;
+      }
+
+      .audio-bars i:nth-child(2) {
+        animation-delay: -220ms;
+      }
+
+      .audio-bars i:nth-child(3) {
+        animation-delay: -370ms;
+      }
+
+      .speech-bubble {
+        display: -webkit-box;
+        min-height: 2.65em;
+        margin: 0;
+        overflow: hidden;
+        color: rgba(255, 255, 255, 0.82);
+        font-size: clamp(10px, 1.25vh, 14px);
+        font-weight: 560;
+        line-height: 1.38;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+
+      .speech-bubble.changing {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      .meeting-footer {
+        justify-content: space-between;
+        gap: 10px;
+        color: rgba(255, 255, 255, 0.46);
+        font-size: clamp(8px, 1vh, 11px);
+      }
+
+      .meeting-hint {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .call-icons {
+        display: flex;
+        gap: 5px;
+      }
+
+      .call-icon {
+        display: grid;
+        width: clamp(19px, 2.4vh, 26px);
+        height: clamp(19px, 2.4vh, 26px);
+        place-items: center;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: clamp(8px, 1vh, 11px);
+      }
+
+      .murmur-card {
+        position: relative;
+        display: grid;
+        min-height: 0;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+        gap: clamp(8px, 1.1vh, 13px);
+        padding: clamp(13px, 2vh, 22px);
+        border: 1px solid rgba(255, 255, 255, 0.72);
+        border-radius: clamp(18px, 2.3vh, 28px);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(22px);
+      }
+
+      .source-row {
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .murmur-logo {
+        font-size: clamp(16px, 2.1vh, 23px);
+        font-weight: 860;
+        letter-spacing: -0.04em;
+      }
+
+      .source {
+        gap: 5px;
+      }
+
+      .source-pill {
+        padding: clamp(5px, 0.7vh, 8px) clamp(7px, 1vw, 11px);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.58);
+        color: var(--muted);
+        font-size: clamp(8px, 1.05vh, 12px);
+        font-weight: 730;
+      }
+
+      .source-pill.on {
+        border-color: rgba(15, 106, 63, 0.17);
+        background: #dff7e9;
+        color: var(--green-ink);
+      }
+
+      .computer-toggle {
+        position: relative;
+        width: clamp(32px, 4vh, 43px);
+        height: clamp(18px, 2.25vh, 24px);
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: #c9c8c4;
+        cursor: pointer;
+        transition: background 200ms ease, box-shadow 200ms ease;
+      }
+
+      .computer-toggle::after {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: calc(100% / 2 - 1px);
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        content: "";
+        transition: transform 200ms cubic-bezier(0.25, 0.8, 0.25, 1);
+      }
+
+      .computer-toggle[aria-checked="true"] {
+        background: var(--red);
+        box-shadow: 0 0 0 5px rgba(240, 58, 47, 0.1);
+      }
+
+      .computer-toggle[aria-checked="true"]::after {
+        transform: translateX(calc(100% - 2px));
+      }
+
+      .status-strip {
+        min-height: clamp(30px, 3.8vh, 42px);
+        padding: 0 clamp(9px, 1.2vw, 13px);
+        border-radius: 12px;
+        background: var(--red-soft);
+        color: #8d211a;
+        transition: background 200ms ease, color 200ms ease;
+      }
+
+      .status-strip.ready {
+        background: #e0f7ea;
+        color: var(--green-ink);
+      }
+
+      .status-copy {
+        height: 100%;
+        gap: 7px;
+        font-size: clamp(9px, 1.1vh, 12px);
+        font-weight: 710;
+      }
+
+      .status-icon {
+        width: 8px;
+        height: 8px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      .work-area {
+        position: relative;
+        min-height: 0;
+      }
+
+      .transcript {
+        position: absolute;
+        inset: 0;
+        padding: clamp(11px, 1.5vh, 16px);
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.65);
+      }
+
+      .transcript-label {
+        margin-bottom: 7px;
+        color: var(--muted);
+        font-size: clamp(8px, 1vh, 11px);
+        font-weight: 760;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .transcript-line {
+        margin: 0 0 6px;
+        font-size: clamp(10px, 1.25vh, 14px);
+        font-weight: 610;
+        line-height: 1.42;
+        animation: line-in 320ms ease both;
+      }
+
+      .transcript-line:last-child {
+        margin-bottom: 0;
+      }
+
+      .speaker-tag {
+        color: var(--red);
+        font-weight: 820;
+      }
+
+      .empty-copy {
+        margin: 0;
+        color: #98958e;
+        font-size: clamp(10px, 1.2vh, 13px);
+        line-height: 1.45;
+      }
+
+      .queue {
+        position: absolute;
+        right: clamp(7px, 1vw, 12px);
+        bottom: clamp(7px, 1vh, 12px);
+        left: clamp(7px, 1vw, 12px);
+        display: grid;
+        gap: 5px;
+        pointer-events: none;
+      }
+
+      .queue-card {
+        position: relative;
+        min-height: clamp(38px, 5vh, 56px);
+        padding: clamp(7px, 1vh, 10px) clamp(9px, 1.2vw, 13px);
+        overflow: hidden;
+        border: 1px solid rgba(21, 22, 24, 0.1);
+        border-radius: 12px;
+        background: rgba(250, 249, 246, 0.95);
+        box-shadow: 0 8px 22px rgba(34, 31, 27, 0.12);
+        animation: card-in 280ms cubic-bezier(0.25, 0.8, 0.25, 1) both;
+      }
+
+      .queue-card:nth-last-child(2) {
+        margin: 0 8px -7px;
+        opacity: 0.82;
+        transform: scale(0.975);
+      }
+
+      .queue-card:nth-last-child(3) {
+        margin: 0 16px -8px;
+        opacity: 0.55;
+        transform: scale(0.95);
+      }
+
+      .queue-header {
+        justify-content: space-between;
+        gap: 8px;
+        font-size: clamp(8px, 1vh, 11px);
+        font-weight: 720;
+      }
+
+      .queue-source {
+        gap: 5px;
+      }
+
+      .queue-source-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--red);
+      }
+
+      .queue-state {
+        color: var(--muted);
+        font-weight: 630;
+      }
+
+      .queue-wave {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 2px;
+        overflow: hidden;
+        background: rgba(240, 58, 47, 0.14);
+      }
+
+      .queue-wave::after {
+        display: block;
+        width: 45%;
+        height: 100%;
+        background: var(--red);
+        content: "";
+        animation: progress 1.2s ease-in-out infinite;
+      }
+
+      .controls {
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .control-main {
+        min-width: 0;
+        gap: 7px;
+      }
+
+      .play-button,
+      .reset-button,
+      .fn-button {
+        border: 0;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+        transition: transform 140ms ease, background 140ms ease, color 140ms ease;
+      }
+
+      .play-button {
+        min-height: clamp(34px, 4.4vh, 46px);
+        padding: 0 clamp(13px, 1.8vw, 20px);
+        border-radius: 999px;
+        background: var(--ink);
+        color: #fff;
+        font-size: clamp(9px, 1.15vh, 13px);
+        font-weight: 780;
+      }
+
+      .play-button:hover,
+      .fn-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .play-button:disabled {
+        cursor: default;
+        opacity: 0.56;
+        transform: none;
+      }
+
+      .reset-button {
+        padding: 7px;
+        background: transparent;
+        color: var(--muted);
+        font-size: clamp(8px, 1vh, 11px);
+        font-weight: 700;
+      }
+
+      .reset-button:hover {
+        color: var(--ink);
+      }
+
+      .reset-button:disabled {
+        cursor: default;
+        opacity: 0.38;
+      }
+
+      .fn-button {
+        display: grid;
+        min-width: clamp(64px, 8vh, 88px);
+        min-height: clamp(38px, 4.8vh, 52px);
+        place-items: center;
+        padding: 0 12px;
+        border-radius: 14px;
+        background: var(--red);
+        box-shadow: 0 6px 0 #bb271e;
+        color: #fff;
+        font-size: clamp(10px, 1.2vh, 14px);
+        font-weight: 820;
+        letter-spacing: 0.02em;
+      }
+
+      .fn-button.pressed,
+      .fn-button:active {
+        box-shadow: 0 2px 0 #bb271e;
+        transform: translateY(4px);
+      }
+
+      .demo-caption {
+        position: absolute;
+        right: clamp(12px, 2.2vw, 22px);
+        bottom: clamp(12px, 2.2vh, 24px);
+        left: clamp(12px, 2.2vw, 22px);
+        z-index: 10;
+        margin: 0;
+        padding: clamp(10px, 1.45vh, 16px) clamp(12px, 1.8vw, 18px);
+        border-radius: 14px;
+        background: rgba(21, 22, 24, 0.94);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.24);
+        color: #fff;
+        font-size: clamp(11px, 1.4vh, 16px);
+        font-weight: 720;
+        line-height: 1.35;
+        text-align: center;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(12px);
+        transition: opacity 260ms ease, transform 260ms ease;
+      }
+
+      .demo-caption.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .demo-caption strong {
+        color: #ff6d62;
+      }
+
+      .missed-toast {
+        position: absolute;
+        top: 47%;
+        left: 50%;
+        z-index: 9;
+        width: max-content;
+        max-width: 80%;
+        padding: 8px 12px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 999px;
+        background: rgba(17, 18, 20, 0.9);
+        color: #fff;
+        font-size: clamp(9px, 1.1vh, 12px);
+        font-weight: 720;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, 8px);
+        transition: opacity 220ms ease, transform 220ms ease;
+      }
+
+      .missed-toast.visible {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0.35;
+        }
+      }
+
+      @keyframes sound {
+        to {
+          height: 12px;
+        }
+      }
+
+      @keyframes line-in {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+      }
+
+      @keyframes card-in {
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.98);
+        }
+      }
+
+      @keyframes progress {
+        from {
+          transform: translateX(-110%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+
+      @media (max-height: 680px) {
+        .page {
+          gap: 7px;
+          padding-top: 12px;
+          padding-bottom: 10px;
+        }
+
+        .eyebrow {
+          margin-bottom: 5px;
+        }
+
+        .meeting,
+        .murmur-card {
+          border-radius: 17px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage" id="stage">
+      <div class="page">
+        <header class="masthead">
+          <div>
+            <div class="eyebrow"><span class="eyebrow-dot"></span>MURMUR / MEETING MODE</div>
+            <h1>会议里值得记住的话，<br /><em>不只来自我。</em></h1>
+          </div>
+          <button class="fullscreen-button" id="fullscreenButton" aria-label="进入全屏录制模式" title="进入全屏录制模式">⛶</button>
+        </header>
+
+        <section class="meeting" aria-label="线上会议模拟画面">
+          <div class="meeting-bar">
+            <div class="meeting-meta">
+              <span class="live-dot"></span>
+              <span>产品发布讨论</span>
+            </div>
+            <span class="meeting-time" id="meetingTime">04:32</span>
+          </div>
+
+          <div class="participants">
+            <button class="participant" data-person="mia" aria-label="让同事 Mia 发言">
+              <span class="avatar avatar-rabbit" aria-hidden="true">🐰</span>
+              <span class="participant-name">
+                <span>Mia · 产品</span>
+                <span class="audio-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+              </span>
+            </button>
+            <button class="participant" data-person="me" aria-label="模拟自己发言">
+              <span class="avatar avatar-me" aria-hidden="true">🙂</span>
+              <span class="participant-name">
+                <span>Arvin</span>
+                <span class="you-badge">你</span>
+              </span>
+            </button>
+            <button class="participant" data-person="riko" aria-label="让同事 Riko 发言">
+              <span class="avatar avatar-bear" aria-hidden="true">🐻</span>
+              <span class="participant-name">
+                <span>Riko · 设计</span>
+                <span class="audio-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+              </span>
+            </button>
+            <button class="participant" data-person="kai" aria-label="让同事 Kai 发言">
+              <span class="avatar avatar-fox" aria-hidden="true">🦊</span>
+              <span class="participant-name">
+                <span>Kai · 工程</span>
+                <span class="audio-bars" aria-hidden="true"><i></i><i></i><i></i></span>
+              </span>
+            </button>
+          </div>
+
+          <p class="speech-bubble" id="speechBubble">点击任意头像，可以手动让会议中的人发言。</p>
+          <div class="meeting-footer">
+            <span class="meeting-hint">线上会议 · 4 人</span>
+            <span class="call-icons" aria-hidden="true">
+              <span class="call-icon">◉</span>
+              <span class="call-icon">⌁</span>
+              <span class="call-icon">•••</span>
+            </span>
+          </div>
+          <div class="missed-toast" id="missedToast">普通语音输入：没有听见这句话</div>
+        </section>
+
+        <section class="murmur-card" aria-label="Murmur 转写面板">
+          <div class="source-row">
+            <span class="murmur-logo">Murmur</span>
+            <div class="source">
+              <span class="source-pill on">麦克风</span>
+              <span class="source-pill" id="computerPill">电脑声音</span>
+              <button
+                class="computer-toggle"
+                id="computerToggle"
+                type="button"
+                role="switch"
+                aria-checked="false"
+                aria-label="聆听电脑声音"
+              ></button>
+            </div>
+          </div>
+
+          <div class="status-strip" id="statusStrip">
+            <div class="status-copy">
+              <span class="status-icon"></span>
+              <span id="statusText">目前只会转写你说的话</span>
+            </div>
+          </div>
+
+          <div class="work-area">
+            <div class="transcript" id="transcript" aria-live="polite">
+              <div class="transcript-label">正在输入到备忘录</div>
+              <p class="empty-copy" id="emptyCopy">说点什么，文字会按说话顺序出现在这里。</p>
+              <div id="transcriptLines"></div>
+            </div>
+            <div class="queue" id="queue" aria-live="polite"></div>
+          </div>
+
+          <div class="controls">
+            <div class="control-main">
+              <button class="play-button" id="playButton" type="button">▶ 播放完整演示</button>
+              <button class="reset-button" id="resetButton" type="button">重新开始</button>
+            </div>
+            <button class="fn-button" id="fnButton" type="button" aria-label="按住 FN 说话">按住 FN</button>
+          </div>
+        </section>
+      </div>
+
+      <p class="demo-caption" id="demoCaption"></p>
+    </main>
+
+    <script>
+      const people = {
+        me: {
+          name: "我",
+          source: "麦克风",
+          line: "我觉得这次发布，可以先讲一个真实的使用场景。",
+        },
+        mia: {
+          name: "Mia",
+          source: "会议声音",
+          line: "那我们把线上会议里的好想法，也一起记下来吧。",
+        },
+        riko: {
+          name: "Riko",
+          source: "会议声音",
+          line: "用户不需要等上一段处理完，就能继续说下一段。",
+        },
+        kai: {
+          name: "Kai",
+          source: "会议声音",
+          line: "电脑里听到的声音，也可以直接变成文字。",
+        },
+      };
+
+      const stage = document.querySelector("#stage");
+      const fullscreenButton = document.querySelector("#fullscreenButton");
+      const computerToggle = document.querySelector("#computerToggle");
+      const computerPill = document.querySelector("#computerPill");
+      const statusStrip = document.querySelector("#statusStrip");
+      const statusText = document.querySelector("#statusText");
+      const playButton = document.querySelector("#playButton");
+      const resetButton = document.querySelector("#resetButton");
+      const fnButton = document.querySelector("#fnButton");
+      const speechBubble = document.querySelector("#speechBubble");
+      const missedToast = document.querySelector("#missedToast");
+      const queue = document.querySelector("#queue");
+      const emptyCopy = document.querySelector("#emptyCopy");
+      const transcriptLines = document.querySelector("#transcriptLines");
+      const demoCaption = document.querySelector("#demoCaption");
+      const meetingTime = document.querySelector("#meetingTime");
+      const participantButtons = [...document.querySelectorAll(".participant")];
+
+      let computerAudioOn = false;
+      let demoRunning = false;
+      let sequence = 0;
+      let queuedJobs = [];
+      let meetingSeconds = 4 * 60 + 32;
+      let manualFnTimer = null;
+
+      const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      function setComputerAudio(on, withCaption = false) {
+        computerAudioOn = on;
+        computerToggle.setAttribute("aria-checked", String(on));
+        computerPill.classList.toggle("on", on);
+        statusStrip.classList.toggle("ready", on);
+        statusText.textContent = on
+          ? "电脑声音已开启 · 会议里的发言也会转成文字"
+          : "目前只会转写你说的话";
+
+        if (withCaption) {
+          showCaption(on ? "打开 <strong>电脑声音</strong>，Murmur 也能听见会议另一边。" : "电脑声音已关闭。", 1800);
+        }
+      }
+
+      function setSpeaker(personKey, line = people[personKey].line) {
+        participantButtons.forEach((button) => {
+          button.classList.toggle("speaking", button.dataset.person === personKey);
+        });
+        speechBubble.classList.add("changing");
+        window.setTimeout(() => {
+          speechBubble.textContent = `${people[personKey].name}：“${line}”`;
+          speechBubble.classList.remove("changing");
+        }, 150);
+      }
+
+      function clearSpeaker() {
+        participantButtons.forEach((button) => button.classList.remove("speaking"));
+      }
+
+      function addJob(personKey, customLine) {
+        const person = people[personKey];
+        const id = `job-${++sequence}`;
+        const job = {
+          id,
+          personKey,
+          name: person.name,
+          source: person.source,
+          line: customLine || person.line,
+        };
+        queuedJobs.push(job);
+
+        const card = document.createElement("div");
+        card.className = "queue-card";
+        card.id = id;
+        card.innerHTML = `
+          <div class="queue-header">
+            <span class="queue-source"><span class="queue-source-dot"></span>${job.source} · ${job.name}</span>
+            <span class="queue-state">正在转写…</span>
+          </div>
+          <div class="queue-wave"></div>
+        `;
+        queue.prepend(card);
+        return job;
+      }
+
+      function completeJob(job) {
+        const card = document.getElementById(job.id);
+        card?.remove();
+        queuedJobs = queuedJobs.filter((item) => item.id !== job.id);
+        emptyCopy.hidden = true;
+
+        const line = document.createElement("p");
+        line.className = "transcript-line";
+        const tag = document.createElement("span");
+        tag.className = "speaker-tag";
+        tag.textContent = `${job.name}：`;
+        line.append(tag, document.createTextNode(job.line));
+        transcriptLines.appendChild(line);
+      }
+
+      function showMissed() {
+        missedToast.classList.add("visible");
+        window.setTimeout(() => missedToast.classList.remove("visible"), 1900);
+      }
+
+      async function showCaption(html, duration = 1600) {
+        demoCaption.innerHTML = html;
+        demoCaption.classList.add("visible");
+        await wait(duration);
+        demoCaption.classList.remove("visible");
+      }
+
+      async function speak(personKey, options = {}) {
+        const person = people[personKey];
+        const line = options.line || person.line;
+        setSpeaker(personKey, line);
+        if (personKey === "me") fnButton.classList.add("pressed");
+        await wait(options.speakFor || 1450);
+        clearSpeaker();
+        fnButton.classList.remove("pressed");
+
+        if (person.source === "会议声音" && !computerAudioOn) {
+          showMissed();
+          return null;
+        }
+        return addJob(personKey, line);
+      }
+
+      async function playDemo() {
+        if (demoRunning) return;
+        resetDemo();
+        demoRunning = true;
+        playButton.disabled = true;
+        resetButton.disabled = true;
+        playButton.textContent = "演示进行中…";
+
+        await showCaption("线上开会时，我说的话可以直接转成文字。", 1450);
+        const first = await speak("me", { speakFor: 1500 });
+        await wait(620);
+        if (first) completeJob(first);
+
+        await wait(400);
+        const missed = speak("mia", { speakFor: 1750 });
+        await wait(300);
+        await showCaption("但普通语音输入，只能听见<strong>麦克风里的我</strong>。", 1400);
+        await missed;
+
+        await wait(720);
+        setComputerAudio(true);
+        await showCaption("Murmur 打开<strong>电脑声音</strong>后，会议另一边也听得见。", 1850);
+
+        const colleagueJob = await speak("riko", { speakFor: 1800 });
+        await wait(520);
+
+        const myNextJobPromise = speak("me", {
+          line: "对，这两点就是 Murmur 最特别的地方。",
+          speakFor: 1350,
+        });
+        await wait(280);
+        await showCaption("同事的话还在处理，我已经可以继续按 <strong>FN</strong> 说下一段。", 1550);
+        const myNextJob = await myNextJobPromise;
+
+        await wait(480);
+        if (colleagueJob) completeJob(colleagueJob);
+        await wait(480);
+        if (myNextJob) completeJob(myNextJob);
+
+        await showCaption("你说的 + 会议里听到的，都会<strong>按顺序</strong>进入输入框。", 2300);
+        demoRunning = false;
+        playButton.disabled = false;
+        resetButton.disabled = false;
+        playButton.textContent = "↻ 再播放一次";
+      }
+
+      function resetDemo() {
+        sequence += 10;
+        queuedJobs = [];
+        queue.innerHTML = "";
+        transcriptLines.innerHTML = "";
+        emptyCopy.hidden = false;
+        clearSpeaker();
+        fnButton.classList.remove("pressed");
+        missedToast.classList.remove("visible");
+        demoCaption.classList.remove("visible");
+        speechBubble.textContent = "点击任意头像，可以手动让会议中的人发言。";
+        setComputerAudio(false);
+      }
+
+      async function manualSpeak(personKey) {
+        if (demoRunning) return;
+        const job = await speak(personKey);
+        if (job) {
+          await wait(1050);
+          completeJob(job);
+        }
+      }
+
+      participantButtons.forEach((button) => {
+        button.addEventListener("click", () => manualSpeak(button.dataset.person));
+      });
+
+      computerToggle.addEventListener("click", () => setComputerAudio(!computerAudioOn, true));
+      playButton.addEventListener("click", playDemo);
+      resetButton.addEventListener("click", resetDemo);
+
+      function startFnPress() {
+        if (demoRunning || manualFnTimer) return;
+        fnButton.classList.add("pressed");
+        setSpeaker("me");
+        manualFnTimer = window.setTimeout(() => finishFnPress(), 850);
+      }
+
+      async function finishFnPress() {
+        if (!manualFnTimer) return;
+        window.clearTimeout(manualFnTimer);
+        manualFnTimer = null;
+        fnButton.classList.remove("pressed");
+        clearSpeaker();
+        const job = addJob("me");
+        await wait(900);
+        completeJob(job);
+      }
+
+      fnButton.addEventListener("pointerdown", startFnPress);
+      window.addEventListener("pointerup", finishFnPress);
+      fnButton.addEventListener("keydown", (event) => {
+        if ((event.key === " " || event.key === "Enter") && !event.repeat) startFnPress();
+      });
+      fnButton.addEventListener("keyup", (event) => {
+        if (event.key === " " || event.key === "Enter") finishFnPress();
+      });
+
+      fullscreenButton.addEventListener("click", async () => {
+        try {
+          if (!document.fullscreenElement) await stage.requestFullscreen();
+          else await document.exitFullscreen();
+        } catch {
+          showCaption("浏览器没有进入全屏，请使用系统全屏快捷键。", 1800);
+        }
+      });
+
+      document.addEventListener("fullscreenchange", () => {
+        fullscreenButton.textContent = document.fullscreenElement ? "×" : "⛶";
+      });
+
+      window.setInterval(() => {
+        meetingSeconds += 1;
+        const minutes = String(Math.floor(meetingSeconds / 60)).padStart(2, "0");
+        const seconds = String(meetingSeconds % 60).padStart(2, "0");
+        meetingTime.textContent = `${minutes}:${seconds}`;
+      }, 1000);
+    </script>
+  </body>
+</html>
