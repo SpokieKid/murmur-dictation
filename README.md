@@ -16,7 +16,8 @@ and start talking.
 - 🎙️ **Push-to-talk dictation** — hold a key, speak, release; text appears at the cursor.
 - 🖥️ **Meeting / computer audio** — optionally mix macOS playback with the microphone,
   so remote participants in Zoom, Meet, Teams, Feishu, browser calls, and videos are
-  transcribed alongside your own voice. Murmur's own cue sounds are excluded.
+  transcribed alongside your own voice. Toggle it directly from the menu bar when you
+  switch between meetings and music; Murmur's own cue sounds are excluded.
 - ⚡️ **Keep talking while Murmur works** — press the trigger again (including Fn) while
   earlier audio is still transcribing or polishing. Takes run in parallel, then paste in
   the exact order they were recorded.
@@ -113,6 +114,9 @@ that exposes playback audio. Murmur captures audio only (no screen frames are st
 mixes it with the selected microphone in real time, and sends the same 16 kHz mono stream
 through the existing ASR pipeline. If permission or system capture is unavailable, the
 current take falls back to microphone-only recording and marks that state in the HUD.
+After setup, use **menu bar → 监听电脑音频** as the everyday shortcut. A checked item
+means computer audio is included; clear it while listening to music. If changed during a
+recording, the new choice takes effect on the next dictation.
 
 The bundled defaults (DashScope qwen3-asr-flash + qwen3.8-flash) are filled in already;
 override any of them per the formats below.

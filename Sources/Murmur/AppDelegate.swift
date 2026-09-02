@@ -12,6 +12,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let historyMenu = NSMenu()
     private let micMenu = NSMenu()
     private let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+    private let systemAudioItem = NSMenuItem(
+        title: "监听电脑音频",
+        action: #selector(toggleSystemAudio(_:)),
+        keyEquivalent: ""
+    )
     private let accessibilityItem = NSMenuItem(title: "Accessibility: …", action: nil, keyEquivalent: "")
     private var settingsWindow: NSWindow?
     private var warnedNoAccessibility = false
@@ -131,6 +136,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         micMenu.delegate = self
         micItem.submenu = micMenu
         menu.addItem(micItem)
+        systemAudioItem.target = self
+        menu.addItem(systemAudioItem)
         menu.addItem(.separator())
         accessibilityItem.isEnabled = false
         menu.addItem(accessibilityItem)
@@ -588,7 +595,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 ? "自动粘贴：✓ 已授权"
                 : "自动粘贴：✗ 未授权（点 Grant Permissions）"
             micItem.title = "Microphone: \(currentMicLabel())"
+            refreshSystemAudioMenuItem()
         }
+    }
+
+    private func refreshSystemAudioMenuItem() {
+        let appliesNextTime = currentRecording != nil || recorder.isRecording
+        systemAudioItem.title = appliesNextTime
+            ? "监听电脑音频（下次听写生效）"
+            : "监听电脑音频"
+        systemAudioItem.state = Defaults.captureSystemAudio ? .on : .off
+        systemAudioItem.toolTip = Defaults.captureSystemAudio
+            ? "已开启；取消勾选后，听写只使用麦克风"
+            : "已关闭；勾选后，同时识别电脑正在播放的声音"
     }
 
     // MARK: - Microphone menu
@@ -690,6 +709,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     // MARK: - Menu actions
+
+    /// Quick meeting-audio switch in the status-bar menu. The recorder snapshots
+    /// this preference at the beginning of each take, so an active take remains
+    /// internally consistent and the new value applies to the next one.
+    @objc private func toggleSystemAudio(_ sender: NSMenuItem) {
+        let enabled = !Defaults.captureSystemAudio
+        UserDefaults.standard.set(enabled, forKey: "captureSystemAudio")
+        refreshSystemAudioMenuItem()
+
+        if enabled, !Permissions.hasScreenCaptureAccess {
+            let granted = Permissions.requestScreenCapture()
+            if !granted {
+                notify("已开启电脑音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中授权 Murmur；授权前会自动使用麦克风。")
+            }
+        }
+    }
 
     @objc private func grantPermissions() {
         Permissions.openSystemSettings()
