@@ -51,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let id: Int
         let sequence: Int
         let chainID: Int
+        let target: TextInjector.Target?
         let realtime: RealtimeTranscriber?
     }
 
@@ -64,15 +65,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let id: Int
         let sequence: Int
         let chainID: Int
+        let target: TextInjector.Target?
         let realtime: RealtimeTranscriber?
         var outcome: JobOutcome?
         var task: Task<Void, Never>?
         var watchdog: DispatchWorkItem?
 
-        init(id: Int, sequence: Int, chainID: Int, realtime: RealtimeTranscriber?) {
+        init(
+            id: Int,
+            sequence: Int,
+            chainID: Int,
+            target: TextInjector.Target?,
+            realtime: RealtimeTranscriber?
+        ) {
             self.id = id
             self.sequence = sequence
             self.chainID = chainID
+            self.target = target
             self.realtime = realtime
         }
     }
@@ -198,20 +207,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
+    /// Chooses an insertion chain based on the field under the hotkey, not just
+    /// on whether some unrelated transcription is still running. This lets jobs
+    /// for different windows complete independently while preserving order and
+    /// spacing for consecutive takes aimed at the same input control.
+    private func insertionDestinationForNewRecording() -> (
+        chainID: Int,
+        target: TextInjector.Target?
+    ) {
+        let target = Defaults.lockInsertionTarget ? TextInjector.captureTarget() : nil
+
+        if state == .working {
+            if let target,
+               let existing = processingJobs.values
+                   .filter({ $0.target?.matches(target) == true })
+                   .max(by: { $0.sequence < $1.sequence }) {
+                return (existing.chainID, existing.target)
+            }
+
+            // Preserve the pre-target-lock behavior when the option is disabled.
+            if !Defaults.lockInsertionTarget, latestChainID != 0 {
+                return (latestChainID, nil)
+            }
+        }
+
+        nextChainID &+= 1
+        latestChainID = nextChainID
+        return (latestChainID, target)
+    }
+
     private func beginDictation() {
         // Processing jobs no longer block the microphone. The only invalid
         // overlap is a second capture (or a second permission callback) while a
         // recording is already being started.
         guard currentRecording == nil, !recorder.isRecording, !isRequestingMicrophone else { return }
-        let chainID: Int
-        if state == .working, latestChainID != 0 {
-            chainID = latestChainID
-        } else {
-            nextChainID &+= 1
-            latestChainID = nextChainID
-            chainID = latestChainID
-            chainsWithDeliveredText.removeAll()
-        }
+        // Capture the destination before a permission sheet or any Murmur UI
+        // can disturb focus. Jobs started in the same field share one mutable
+        // target session, so ordered insertions advance the same caret state.
+        let destination = insertionDestinationForNewRecording()
+        let chainID = destination.chainID
+        let insertionTarget = destination.target
         isRequestingMicrophone = true
         Permissions.requestMicrophone { [weak self] granted in
             guard let self = self else { return }
@@ -249,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     id: id,
                     sequence: sequence,
                     chainID: chainID,
+                    target: insertionTarget,
                     realtime: realtime
                 )
                 self.refreshActivity()
@@ -325,6 +361,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             id: recording.id,
             sequence: recording.sequence,
             chainID: recording.chainID,
+            target: recording.target,
             realtime: recording.realtime
         )
         processingJobs[job.id] = job
@@ -486,27 +523,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         drainDeliveryQueue()
     }
 
-    /// Delivers every completed head-of-line job, while holding later results
-    /// until their predecessors finish. A short gap keeps consecutive synthetic
-    /// paste events from racing each other in the target app.
+    /// Delivers completed jobs as soon as their own input target is ready. An
+    /// earlier job blocks later jobs for the same field, but never blocks a job
+    /// aimed at another window. A short global gap still protects the shared
+    /// clipboard when an editor needs the synthetic-paste fallback.
     private func drainDeliveryQueue() {
         guard !deliveryBusy else {
             markCompletedJobsWaiting()
             return
         }
 
-        while let id = deliveryOrder.first {
+        deliveryOrder.removeAll { processingJobs[$0] == nil }
+        while let id = nextDeliverableJobID() {
             guard let job = processingJobs[id] else {
-                deliveryOrder.removeFirst()
+                deliveryOrder.removeAll { $0 == id }
                 continue
             }
-            guard let outcome = job.outcome else {
-                markCompletedJobsWaiting()
-                refreshActivity()
-                return
-            }
+            guard let outcome = job.outcome else { break }
 
-            deliveryOrder.removeFirst()
+            deliveryOrder.removeAll { $0 == id }
             switch outcome {
             case .success(let text):
                 processingJobs.removeValue(forKey: id)
@@ -519,11 +554,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 deliveryBusy = true
                 let isContinuation = chainsWithDeliveredText.contains(job.chainID)
                 let insertionText = isContinuation ? textWithContinuationSeparator(trimmed) : trimmed
-                let pasted = deliver(transcript: trimmed, insertionText: insertionText)
-                chainsWithDeliveredText.insert(job.chainID)
+                let insertion = deliver(
+                    transcript: trimmed,
+                    insertionText: insertionText,
+                    target: job.target
+                )
+                if insertion.didInsert {
+                    chainsWithDeliveredText.insert(job.chainID)
+                }
+                let messageKey: String
+                switch insertion {
+                case .inserted:
+                    messageKey = "hud.pasted"
+                case .copiedAccessibilityRequired:
+                    messageKey = "hud.copied"
+                case .copiedTargetUnavailable:
+                    messageKey = "hud.target_unavailable_copied"
+                }
                 hud.finish(
                     id: id,
-                    message: L10n.tr(pasted ? "hud.pasted" : "hud.copied"),
+                    message: L10n.tr(messageKey),
                     style: .success
                 )
                 refreshActivity()
@@ -539,7 +589,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             }
         }
 
+        markCompletedJobsWaiting()
         refreshActivity()
+    }
+
+    /// Finds the earliest completed job whose own target has no older pending
+    /// job. Nil targets are grouped by chain so fallback copies also retain their
+    /// spoken order without blocking unrelated fields.
+    private func nextDeliverableJobID() -> Int? {
+        for (index, id) in deliveryOrder.enumerated() {
+            guard let candidate = processingJobs[id], candidate.outcome != nil else { continue }
+            let blocked = deliveryOrder[..<index].contains { earlierID in
+                guard let earlier = processingJobs[earlierID] else { return false }
+                return sharesDeliveryTarget(earlier, candidate)
+            }
+            if !blocked { return id }
+        }
+        return nil
+    }
+
+    private func sharesDeliveryTarget(_ lhs: ProcessingJob, _ rhs: ProcessingJob) -> Bool {
+        switch (lhs.target, rhs.target) {
+        case let (left?, right?):
+            return left.id == right.id
+        case (nil, nil):
+            return lhs.chainID == rhs.chainID
+        default:
+            return false
+        }
     }
 
     private func markCompletedJobsWaiting() {
@@ -552,17 +629,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Saves the transcript to history and pastes it (or falls back to the
     /// clipboard). HUD completion is per-job and handled by the ordered drain.
     @discardableResult
-    private func deliver(transcript: String, insertionText: String) -> Bool {
+    private func deliver(
+        transcript: String,
+        insertionText: String,
+        target: TextInjector.Target?
+    ) -> TextInjector.InsertionResult {
         let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
+        guard !trimmed.isEmpty else { return .copiedTargetUnavailable }
         TranscriptHistory.add(trimmed)
-        let pasted = TextInjector.insert(insertionText)
+        let insertion = TextInjector.insert(insertionText, into: target)
 
-        if !pasted, !warnedNoAccessibility {
+        if case .copiedAccessibilityRequired = insertion, !warnedNoAccessibility {
             warnedNoAccessibility = true
             notify(L10n.tr("alert.clipboard_fallback"))
         }
-        return pasted
+        return insertion
     }
 
     /// Separate consecutive English/ASCII additions with one space while

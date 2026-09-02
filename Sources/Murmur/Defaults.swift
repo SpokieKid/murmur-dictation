@@ -78,6 +78,10 @@ enum Defaults {
             "micName": "",           // last-known name of micUID, so the menu can
                                      // still label it when it's unplugged
             "restoreClipboard": true,
+            // Keep each transcript attached to the field that was focused when
+            // recording began. If that target cannot be reached safely, copy
+            // instead of pasting into whichever window happens to be active.
+            "lockInsertionTarget": true,
             "playSounds": true,
             "showWaveform": true,
             // Mix macOS playback (meeting participants, videos, etc.) into the
@@ -254,6 +258,7 @@ enum Defaults {
         d.set(uid.isEmpty ? "" : name, forKey: "micName")
     }
     static var restoreClipboard: Bool { UserDefaults.standard.bool(forKey: "restoreClipboard") }
+    static var lockInsertionTarget: Bool { UserDefaults.standard.bool(forKey: "lockInsertionTarget") }
     static var playSounds: Bool { UserDefaults.standard.bool(forKey: "playSounds") }
     static var showWaveform: Bool { UserDefaults.standard.bool(forKey: "showWaveform") }
     static var captureSystemAudio: Bool { UserDefaults.standard.bool(forKey: "captureSystemAudio") }

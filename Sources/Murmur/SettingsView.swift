@@ -11,6 +11,7 @@ struct SettingsView: View {
     @AppStorage("triggerMode") private var triggerMode = "toggle"
     @AppStorage("micUID") private var micUID = ""
     @AppStorage("restoreClipboard") private var restoreClipboard = true
+    @AppStorage("lockInsertionTarget") private var lockInsertionTarget = true
     @AppStorage("playSounds") private var playSounds = true
     @AppStorage("showWaveform") private var showWaveform = true
     @AppStorage("captureSystemAudio") private var captureSystemAudio = false
@@ -207,8 +208,13 @@ struct SettingsView: View {
             }
             Section(L10n.tr("settings.feedback")) {
                 Toggle(L10n.tr("settings.show_waveform"), isOn: $showWaveform)
+                Toggle(L10n.tr("settings.lock_input_target"), isOn: $lockInsertionTarget)
                 Toggle(L10n.tr("settings.restore_clipboard"), isOn: $restoreClipboard)
                 Toggle(L10n.tr("settings.play_sounds"), isOn: $playSounds)
+                Text(L10n.tr("settings.lock_input_target_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section {
                 Text(L10n.tr("settings.parallel_hint"))

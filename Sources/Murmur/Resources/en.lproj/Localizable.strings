@@ -69,9 +69,11 @@
 "settings.trigger_key" = "Trigger key";
 "settings.feedback" = "Feedback";
 "settings.show_waveform" = "Show waveform while recording";
+"settings.lock_input_target" = "Paste back into the field where dictation started";
+"settings.lock_input_target_hint" = "You can switch windows while Murmur works. If the original field is no longer safe to reach, the result is copied instead of being pasted somewhere else.";
 "settings.restore_clipboard" = "Restore clipboard after pasting";
 "settings.play_sounds" = "Play start/stop sounds";
-"settings.parallel_hint" = "No need to wait while a transcript is processing or being polished: press the trigger again (including Fn) to record another thought. Jobs run in parallel and are pasted in recording order. Microphone, Accessibility, and Input Monitoring permissions are required.";
+"settings.parallel_hint" = "No need to wait while a transcript is processing or being polished: press the trigger again (including Fn) to record another thought. Jobs run in parallel, return to the field where each recording started, and stay ordered within that field. Microphone, Accessibility, and Input Monitoring permissions are required.";
 
 "hud.hidden_processing" = "+%d processing";
 "hud.listening_both" = "Listening… · Mic + Computer Audio";
@@ -88,6 +90,7 @@
 "hud.no_text" = "No Text Recognized";
 "hud.pasted" = "✓ Pasted";
 "hud.copied" = "✓ Copied · ⌘V";
+"hud.target_unavailable_copied" = "Original Field Unavailable · Copied";
 "hud.waiting" = "Waiting for Earlier Dictation…";
 "hud.timeout" = "Transcription Timed Out · Try Again";
 

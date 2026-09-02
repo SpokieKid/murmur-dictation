@@ -33,4 +33,13 @@ final class LocalizationTests: XCTestCase {
         UserDefaults.standard.set(AppLanguage.simplifiedChinese.rawValue, forKey: "appLanguage")
         XCTAssertEqual(L10n.format("hud.hidden_processing", 3), "+3 个处理中")
     }
+
+    func testPinnedTargetStringsExistInBothLanguages() {
+        for language in [AppLanguage.english, AppLanguage.simplifiedChinese] {
+            UserDefaults.standard.set(language.rawValue, forKey: "appLanguage")
+            XCTAssertFalse(L10n.tr("settings.lock_input_target").isEmpty)
+            XCTAssertFalse(L10n.tr("settings.lock_input_target_hint").isEmpty)
+            XCTAssertFalse(L10n.tr("hud.target_unavailable_copied").isEmpty)
+        }
+    }
 }

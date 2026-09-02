@@ -22,6 +22,17 @@ telemetry, advertising SDK, or backend service.
 - Transcripts may be sent to the user-configured LLM endpoint when LLM Polish is
   enabled.
 
+## Input target
+
+- When pinned insertion is enabled, Murmur uses the macOS Accessibility API at
+  the start of each dictation to remember the focused app and text control.
+- Murmur may temporarily read that control's current text and selection range in
+  memory so it can verify the field has not changed before inserting a result.
+  This context is never persisted, logged, or sent to an ASR/LLM provider.
+- Secure text fields are excluded. If the original control closes, changes in an
+  unsafe way, or does not support background insertion, Murmur leaves the result
+  on the clipboard instead of pasting into another field.
+
 The privacy terms and data handling of the ASR and LLM providers selected by the
 user apply to requests sent to those services. Review those terms before use,
 especially for confidential meetings or regulated data.

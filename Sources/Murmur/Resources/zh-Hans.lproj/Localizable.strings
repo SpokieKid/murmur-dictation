@@ -69,9 +69,11 @@
 "settings.trigger_key" = "触发键";
 "settings.feedback" = "反馈";
 "settings.show_waveform" = "录音时显示波形";
+"settings.lock_input_target" = "转写完成后回到开始听写的输入框";
+"settings.lock_input_target_hint" = "Murmur 处理时可以自由切换窗口。如果无法安全找到原输入框，结果只会复制到剪贴板，不会粘贴到其他位置。";
 "settings.restore_clipboard" = "粘贴后恢复剪贴板";
 "settings.play_sounds" = "播放开始 / 停止提示音";
-"settings.parallel_hint" = "转录或润色还在处理中也不用等待：再次按触发键（包括 Fn）即可录制下一段。多个任务会并行处理，并严格按录音顺序粘贴。需要麦克风、辅助功能与输入监控权限。";
+"settings.parallel_hint" = "转录或润色还在处理中也不用等待：再次按触发键（包括 Fn）即可录制下一段。多个任务会并行处理，分别回到开始听写的输入框，并在各自输入框内保持顺序。需要麦克风、辅助功能与输入监控权限。";
 
 "hud.hidden_processing" = "+%d 个处理中";
 "hud.listening_both" = "正在聆听… · 麦克风 + 电脑声音";
@@ -88,6 +90,7 @@
 "hud.no_text" = "未识别到文字";
 "hud.pasted" = "✓ 已粘贴";
 "hud.copied" = "✓ 已复制 · ⌘V";
+"hud.target_unavailable_copied" = "原输入框不可用 · 已复制";
 "hud.waiting" = "等待前一段听写…";
 "hud.timeout" = "转录超时，请重试";
 

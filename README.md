@@ -8,7 +8,8 @@
 
 A tiny macOS menu-bar dictation app in the spirit of **Wispr Flow** and **Typeless** —
 but you bring your **own ASR API**. Hold a key, speak, release, and your words are
-transcribed and pasted at the cursor in whatever app is focused.
+transcribed back into the field where dictation began, even if you switch windows
+while Murmur is working.
 
 No subscription, no vendor lock-in. Point it at OpenAI Whisper, Groq, a local
 `whisper.cpp` server, or Alibaba's **Qwen3-ASR (`qwen3-asr-flash`)**.
@@ -27,7 +28,11 @@ ASR endpoint or Alibaba Cloud Model Studio, grant the macOS permissions, and sta
   **General → Language**, without relaunching the app.
 - ⚡️ **Keep talking while Murmur works** — press the trigger again (including Fn) while
   earlier audio is still transcribing or polishing. Takes run in parallel, then paste in
-  the exact order they were recorded.
+  order within each destination field.
+- 🎯 **Pinned insertion target** — every take remembers the app and input field where it
+  started. Switch windows immediately; completed text returns to the original field in
+  the background. If that field is gone or unsafe to reach, Murmur copies the result
+  instead of pasting it into the wrong window. Secure text fields are never targeted.
 - 🗂️ **Stacked task HUD** — every active recording / transcription gets its own animated
   card, stacked above the original floating waveform so parallel progress stays visible.
 - 🌊 **Live waveform** — a floating pill near the bottom of the screen reacts to your
@@ -57,8 +62,9 @@ ASR endpoint or Alibaba Cloud Model Studio, grant the macOS permissions, and sta
 2. **Stop** — Murmur captures 16 kHz mono audio and starts ASR / optional LLM polish.
 3. **Keep going immediately** — while that card is processing, press the trigger again
    and record another thought. Each take processes concurrently.
-4. **Ordered paste** — even if a later take finishes first, it waits for earlier takes;
-   results are inserted at the cursor in recording order (⌘V).
+4. **Safe return** — each result goes back to the field where that take started. Earlier
+   takes block later ones only when they share a destination, so separate windows can
+   finish independently. An unavailable target falls back to the clipboard.
 
 It lives in the menu bar (🎙️). No Dock icon, no window unless you open Settings.
 
@@ -82,7 +88,7 @@ macOS gates everything Murmur needs behind privacy permissions. Use **menu →
 | Permission         | Why                                          |
 |--------------------|----------------------------------------------|
 | **Microphone**     | record your voice                            |
-| **Accessibility**  | synthesise ⌘V to paste at the cursor         |
+| **Accessibility**  | remember the original input field and insert the result |
 | **Input Monitoring** | detect the push-to-talk key in other apps  |
 | **Screen & System Audio Recording** | capture the other side of online meetings |
 
@@ -99,8 +105,8 @@ Open **menu → Settings…** — four tabs:
 - **Polish** — toggle LLM cleanup, its endpoint/key/model, the instruction prompt, and
   **voice self-edit** (apply spoken corrections like "scratch that" / "change X to Y").
 - **Vocabulary** — one term per line; biases ASR and is passed to the polish step.
-- **General** — microphone device, meeting/computer audio, trigger mode + key, waveform,
-  clipboard, and sounds.
+- **General** — microphone device, meeting/computer audio, trigger mode + key, pinned
+  insertion target, waveform, clipboard, and sounds.
 
 ### Trigger modes
 

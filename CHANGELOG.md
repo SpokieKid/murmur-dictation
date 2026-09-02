@@ -2,6 +2,23 @@
 
 All notable changes to Murmur are documented here.
 
+## [0.5.0] - 2026-09-02
+
+### Added
+
+- Pinned insertion targets: each dictation remembers the app and text field
+  where it began, so users can switch windows while transcription continues.
+- Safe fallback to the clipboard when the original field has closed, changed,
+  is secure, or cannot accept background insertion.
+- Independent ordered delivery per input target, allowing jobs for separate
+  windows to finish without blocking one another.
+
+### Changed
+
+- Added a General setting for switching between pinned-target delivery and the
+  previous paste-at-current-focus behavior.
+- Corrected the computer-audio switch alignment in the Xiaohongshu demo.
+
 ## [0.4.0] - 2026-09-02
 
 ### Added
