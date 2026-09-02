@@ -69,7 +69,7 @@ SIGN_IDENTITY=- ./build.sh release
 
 ## 参与贡献
 
-欢迎提交 Issue、翻译和 Pull Request。请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 和 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
+欢迎提交 Issue、翻译和 Pull Request。隐私与数据流说明见 [PRIVACY.md](PRIVACY.md)；参与贡献前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 和 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
 
 ## 许可证
 

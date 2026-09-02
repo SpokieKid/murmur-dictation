@@ -195,3 +195,11 @@ build.sh              compile + bundle + ad-hoc sign
 - DashScope response parsing targets the documented `output.choices[].message.content`
   shape; if Alibaba changes it, adjust `extractDashScopeText` in `Transcriber.swift`.
 - Ad-hoc signed for local use — not notarised for distribution.
+
+## Privacy and contributing
+
+See [PRIVACY.md](PRIVACY.md) for exactly when audio is captured, where it is sent,
+and what is stored locally. Contributions are welcome; read [CONTRIBUTING.md](CONTRIBUTING.md),
+[SECURITY.md](SECURITY.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) first.
+
+Murmur is available under the [MIT License](LICENSE).
