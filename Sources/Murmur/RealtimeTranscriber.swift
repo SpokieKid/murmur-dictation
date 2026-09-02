@@ -20,9 +20,9 @@ final class RealtimeTranscriber {
 
         var errorDescription: String? {
             switch self {
-            case .connectFailed: return "Could not connect to the realtime ASR service."
-            case .taskFailed(let msg): return "Realtime ASR failed: \(msg)"
-            case .notConfigured: return "Set your API key in Settings first."
+            case .connectFailed: return L10n.tr("error.realtime_connect")
+            case .taskFailed(let msg): return L10n.format("error.realtime_failed", msg)
+            case .notConfigured: return L10n.tr("error.api_key_required")
             }
         }
     }
@@ -92,7 +92,9 @@ final class RealtimeTranscriber {
                 throw RealtimeError.connectFailed
             }
             guard Self.eventName(event) == "task-started" else {
-                throw RealtimeError.taskFailed(Self.errorMessage(event) ?? "unexpected response")
+                throw RealtimeError.taskFailed(
+                    Self.errorMessage(event) ?? L10n.tr("error.unexpected_realtime_response")
+                )
             }
         } catch {
             ws.cancel(with: .goingAway, reason: nil)

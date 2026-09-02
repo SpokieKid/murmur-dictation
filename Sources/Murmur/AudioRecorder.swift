@@ -77,16 +77,16 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
         microphoneConverter.reset()
 
         let device = AudioDevices.device(forUID: deviceUID ?? "") ?? AVCaptureDevice.default(for: .audio)
-        guard let device = device else { throw err("没有可用的音频输入设备。") }
+        guard let device = device else { throw err(L10n.tr("error.no_audio_device")) }
 
         let session = AVCaptureSession()
         let input = try AVCaptureDeviceInput(device: device)
-        guard session.canAddInput(input) else { throw err("无法使用该麦克风。") }
+        guard session.canAddInput(input) else { throw err(L10n.tr("error.microphone_unavailable")) }
         session.addInput(input)
 
         let output = AVCaptureAudioDataOutput()
         output.setSampleBufferDelegate(self, queue: queue)
-        guard session.canAddOutput(output) else { throw err("无法初始化音频采集。") }
+        guard session.canAddOutput(output) else { throw err(L10n.tr("error.audio_capture_init")) }
         session.addOutput(output)
 
         if captureSystemAudio {

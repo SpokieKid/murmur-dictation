@@ -21,9 +21,9 @@ enum Transcriber {
 
         var errorDescription: String? {
             switch self {
-            case .http(let code, let body): return "Server returned \(code): \(body)"
-            case .badResponse(let s): return "Unexpected response: \(s)"
-            case .notConfigured: return "Set your API key in Settings first."
+            case .http(let code, let body): return L10n.format("error.server_returned", code, body)
+            case .badResponse(let s): return L10n.format("error.unexpected_response", s)
+            case .notConfigured: return L10n.tr("error.api_key_required")
             }
         }
     }
@@ -76,7 +76,9 @@ enum Transcriber {
     // MARK: - OpenAI-compatible multipart
 
     private static func openAICompatible(wav: Data, config: Config) async throws -> String {
-        guard let url = URL(string: config.endpoint) else { throw TranscribeError.badResponse("invalid endpoint") }
+        guard let url = URL(string: config.endpoint) else {
+            throw TranscribeError.badResponse(L10n.tr("error.invalid_endpoint"))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.timeoutInterval = requestTimeout
@@ -110,13 +112,15 @@ enum Transcriber {
             return text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         if let s = String(data: data, encoding: .utf8) { return s.trimmingCharacters(in: .whitespacesAndNewlines) }
-        throw TranscribeError.badResponse("could not parse transcript")
+        throw TranscribeError.badResponse(L10n.tr("error.parse_transcript"))
     }
 
     // MARK: - DashScope (Qwen3-ASR)
 
     private static func dashScope(wav: Data, config: Config) async throws -> String {
-        guard let url = URL(string: config.endpoint) else { throw TranscribeError.badResponse("invalid endpoint") }
+        guard let url = URL(string: config.endpoint) else {
+            throw TranscribeError.badResponse(L10n.tr("error.invalid_endpoint"))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.timeoutInterval = requestTimeout
@@ -149,7 +153,7 @@ enum Transcriber {
         let (data, resp) = try await send(req)
         try checkStatus(resp, data)
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw TranscribeError.badResponse("non-JSON response")
+            throw TranscribeError.badResponse(L10n.tr("error.non_json_response"))
         }
         if let text = extractDashScopeText(obj) { return text.trimmingCharacters(in: .whitespacesAndNewlines) }
         let raw = String(data: data, encoding: .utf8) ?? ""

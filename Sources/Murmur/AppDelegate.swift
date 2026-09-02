@@ -11,13 +11,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let hud = WaveformHUD()
     private let historyMenu = NSMenu()
     private let micMenu = NSMenu()
-    private let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+    private let startStopItem = NSMenuItem(
+        title: "",
+        action: #selector(toggleDictation),
+        keyEquivalent: ""
+    )
+    private let historyItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let micItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let systemAudioItem = NSMenuItem(
-        title: "监听电脑音频",
+        title: "",
         action: #selector(toggleSystemAudio(_:)),
         keyEquivalent: ""
     )
-    private let accessibilityItem = NSMenuItem(title: "Accessibility: …", action: nil, keyEquivalent: "")
+    private let accessibilityItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let settingsItem = NSMenuItem(
+        title: "",
+        action: #selector(openSettings(_:)),
+        keyEquivalent: ","
+    )
+    private let permissionsItem = NSMenuItem(
+        title: "",
+        action: #selector(grantPermissions),
+        keyEquivalent: ""
+    )
+    private let quitItem = NSMenuItem(
+        title: "",
+        action: #selector(NSApplication.terminate(_:)),
+        keyEquivalent: "q"
+    )
     private var settingsWindow: NSWindow?
     private var warnedNoAccessibility = false
 
@@ -102,6 +123,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         NotificationCenter.default.addObserver(self, selector: #selector(hotkeyChanged),
                                                name: .hotkeyChanged, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appLanguageChanged),
+                                               name: .appLanguageChanged, object: nil)
 
         Permissions.requestMicrophone()
         if Defaults.captureSystemAudio, !Permissions.hasScreenCaptureAccess {
@@ -125,9 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         render(.idle)
         let menu = NSMenu()
         menu.delegate = self
-        menu.addItem(withTitle: "Start / Stop Dictation", action: #selector(toggleDictation), keyEquivalent: "")
+        menu.addItem(startStopItem)
         menu.addItem(.separator())
-        let historyItem = NSMenuItem(title: "Recent Transcripts", action: nil, keyEquivalent: "")
         historyMenu.delegate = self
         historyItem.submenu = historyMenu
         menu.addItem(historyItem)
@@ -141,14 +163,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
         accessibilityItem.isEnabled = false
         menu.addItem(accessibilityItem)
-        menu.addItem(withTitle: "Settings…", action: #selector(openSettings(_:)), keyEquivalent: ",")
-        menu.addItem(withTitle: "Grant Permissions…", action: #selector(grantPermissions), keyEquivalent: "")
+        menu.addItem(settingsItem)
+        menu.addItem(permissionsItem)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Murmur", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(quitItem)
         for item in menu.items where item.action != nil {
             item.target = item.action == #selector(NSApplication.terminate(_:)) ? nil : self
         }
         statusItem.menu = menu
+        localizeMainMenu()
     }
 
     private func render(_ state: State) {
@@ -193,7 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         Permissions.requestMicrophone { [weak self] granted in
             guard let self = self else { return }
             self.isRequestingMicrophone = false
-            guard granted else { self.notify("Microphone access denied"); return }
+            guard granted else { self.notify(L10n.tr("alert.microphone_denied")); return }
             guard self.currentRecording == nil, !self.recorder.isRecording else { return }
 
             self.nextJobID &+= 1
@@ -233,11 +256,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // so the key keeps working normally everywhere else.
                 if Defaults.showWaveform {
                     let status = systemAudioGranted
-                        ? "Listening… · 麦克风 + 电脑音频"
-                        : "Listening… ⎋ 取消"
+                        ? L10n.tr("hud.listening_both")
+                        : L10n.tr("hud.listening")
                     self.hud.start(id: id, sequence: sequence, status: status)
                     if wantsSystemAudio, !systemAudioGranted {
-                        self.hud.warn(id: id, status: "仅麦克风 · 请授权电脑音频")
+                        self.hud.warn(id: id, status: L10n.tr("hud.microphone_only_permission"))
                     }
                 }
                 if Defaults.playSounds { NSSound(named: "Tink")?.play() }
@@ -250,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 realtime?.cancel()
                 self.clearRecorderCallbacks()
                 self.refreshActivity()
-                self.notify("Recording failed: \(error.localizedDescription)")
+                self.notify(L10n.format("alert.recording_failed", error.localizedDescription))
             }
         }
     }
@@ -287,13 +310,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // hint. No modal alert, and don't waste an ASR call on silence.
         if buffers == 0 {
             recording.realtime?.cancel()
-            hud.finish(id: recording.id, message: "未检测到麦克风输入", style: .failure)
+            hud.finish(id: recording.id, message: L10n.tr("hud.no_microphone_input"), style: .failure)
             refreshActivity()
             return
         }
         if seconds < minDuration || peak < 0.006 {
             recording.realtime?.cancel()
-            hud.finish(id: recording.id, message: "未检测到语音", style: .failure)
+            hud.finish(id: recording.id, message: L10n.tr("hud.no_speech"), style: .failure)
             refreshActivity()
             return
         }
@@ -306,7 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
         processingJobs[job.id] = job
         deliveryOrder.append(job.id)
-        hud.setProcessing(id: job.id, status: "Transcribing…")
+        hud.setProcessing(id: job.id, status: L10n.tr("hud.transcribing"))
         refreshActivity()
 
         let config = Defaults.config()
@@ -333,7 +356,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                     await MainActor.run {
                         self.updateJobStage(
                             job.id,
-                            status: isLongDictation ? "Polishing long dictation…" : "Polishing…"
+                            status: L10n.tr(isLongDictation ? "hud.polishing_long" : "hud.polishing")
                         )
                     }
                     if let polished = await LLMRefiner.refine(
@@ -371,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             recording.realtime?.cancel()
             currentRecording = nil
             if Defaults.playSounds { NSSound(named: "Bottle")?.play() }
-            hud.finish(id: recording.id, message: "✗ 已取消", style: .cancelled)
+            hud.finish(id: recording.id, message: L10n.tr("hud.cancelled"), style: .cancelled)
             refreshActivity()
             return
         }
@@ -389,7 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 job.realtime?.cancel()
                 job.outcome = .cancelled
                 if Defaults.playSounds { NSSound(named: "Bottle")?.play() }
-                hud.finish(id: id, message: "✗ 已取消", style: .cancelled)
+                hud.finish(id: id, message: L10n.tr("hud.cancelled"), style: .cancelled)
                 drainDeliveryQueue()
                 return
             case .failure?, .cancelled?:
@@ -404,7 +427,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func handleApproachingLimit(_ remaining: Int) {
         guard let recording = currentRecording else { return }
         if Defaults.showWaveform {
-            hud.warn(id: recording.id, status: "⚠️ \(remaining) 秒后自动停止录音")
+            hud.warn(id: recording.id, status: L10n.format("hud.limit_warning", remaining))
         }
         if !playedLimitWarning {
             playedLimitWarning = true
@@ -431,7 +454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard currentRecording?.id == id else { return }
         perfLog.error("system audio job=\(id) error=\(message, privacy: .public)")
         if Defaults.showWaveform {
-            hud.warn(id: id, status: "电脑音频不可用 · 仅麦克风")
+            hud.warn(id: id, status: L10n.tr("hud.computer_audio_unavailable"))
         }
     }
 
@@ -457,7 +480,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let short = oneLine.count > 34 ? String(oneLine.prefix(34)) + "…" : oneLine
             hud.finish(id: id, message: "✗ \(short)", style: .failure)
         case .cancelled:
-            hud.finish(id: id, message: "✗ 已取消", style: .cancelled)
+            hud.finish(id: id, message: L10n.tr("hud.cancelled"), style: .cancelled)
         }
 
         drainDeliveryQueue()
@@ -489,7 +512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 processingJobs.removeValue(forKey: id)
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
-                    hud.finish(id: id, message: "未识别到文字", style: .failure)
+                    hud.finish(id: id, message: L10n.tr("hud.no_text"), style: .failure)
                     continue
                 }
 
@@ -500,7 +523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 chainsWithDeliveredText.insert(job.chainID)
                 hud.finish(
                     id: id,
-                    message: pasted ? "✓ 已粘贴" : "✓ 已复制 · ⌘V",
+                    message: L10n.tr(pasted ? "hud.pasted" : "hud.copied"),
                     style: .success
                 )
                 refreshActivity()
@@ -522,7 +545,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func markCompletedJobsWaiting() {
         for id in deliveryOrder {
             guard case .success? = processingJobs[id]?.outcome else { continue }
-            hud.setWaiting(id: id, status: "等待前序任务…")
+            hud.setWaiting(id: id, status: L10n.tr("hud.waiting"))
         }
     }
 
@@ -537,7 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         if !pasted, !warnedNoAccessibility {
             warnedNoAccessibility = true
-            notify("结果已复制到剪贴板，按 ⌘V 即可粘贴。\n\n要让 Murmur 自动粘贴到光标处，请在 系统设置 → 隐私与安全性 → 辅助功能 里勾选 Murmur（菜单「Grant Permissions…」可直达），然后重启 App。\n\n所有转录都能在菜单「Recent Transcripts」里查看。")
+            notify(L10n.tr("alert.clipboard_fallback"))
         }
         return pasted
     }
@@ -575,8 +598,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         job.task = nil
         job.watchdog = nil
         job.realtime?.cancel()
-        job.outcome = .failure("转录超时，请重试")
-        hud.finish(id: id, message: "转录超时，请重试", style: .failure)
+        let message = L10n.tr("hud.timeout")
+        job.outcome = .failure(message)
+        hud.finish(id: id, message: message, style: .failure)
         drainDeliveryQueue()
     }
 
@@ -588,26 +612,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         } else if menu === micMenu {
             rebuildMicMenu(menu)
         } else {
-            // Main menu: reflect live Accessibility (auto-paste) status and the
-            // currently selected input device.
-            let trusted = AXIsProcessTrusted()
-            accessibilityItem.title = trusted
-                ? "自动粘贴：✓ 已授权"
-                : "自动粘贴：✗ 未授权（点 Grant Permissions）"
-            micItem.title = "Microphone: \(currentMicLabel())"
-            refreshSystemAudioMenuItem()
+            // Main menu: refresh both its active language and live state.
+            localizeMainMenu()
         }
+    }
+
+    private func localizeMainMenu() {
+        startStopItem.title = L10n.tr("menu.start_stop")
+        historyItem.title = L10n.tr("menu.recent_transcripts")
+        settingsItem.title = L10n.tr("menu.settings")
+        permissionsItem.title = L10n.tr("menu.grant_permissions")
+        quitItem.title = L10n.tr("menu.quit")
+        accessibilityItem.title = AXIsProcessTrusted()
+            ? L10n.tr("menu.auto_paste_authorized")
+            : L10n.tr("menu.auto_paste_unauthorized")
+        micItem.title = "\(L10n.tr("menu.microphone")): \(currentMicLabel())"
+        refreshSystemAudioMenuItem()
     }
 
     private func refreshSystemAudioMenuItem() {
         let appliesNextTime = currentRecording != nil || recorder.isRecording
         systemAudioItem.title = appliesNextTime
-            ? "监听电脑音频（下次听写生效）"
-            : "监听电脑音频"
+            ? L10n.tr("menu.include_computer_audio_next")
+            : L10n.tr("menu.include_computer_audio")
         systemAudioItem.state = Defaults.captureSystemAudio ? .on : .off
         systemAudioItem.toolTip = Defaults.captureSystemAudio
-            ? "已开启；取消勾选后，听写只使用麦克风"
-            : "已关闭；勾选后，同时识别电脑正在播放的声音"
+            ? L10n.tr("menu.computer_audio_on_hint")
+            : L10n.tr("menu.computer_audio_off_hint")
     }
 
     // MARK: - Microphone menu
@@ -617,10 +648,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// to the system default for the next take).
     private func currentMicLabel() -> String {
         let uid = Defaults.micUID
-        guard !uid.isEmpty else { return "System default" }
+        guard !uid.isEmpty else { return L10n.tr("menu.system_default") }
         if let name = AudioDevices.name(forUID: uid) { return truncated(name) }
         let remembered = Defaults.micName
-        return remembered.isEmpty ? "未连接的设备" : "\(truncated(remembered))（未连接）"
+        return remembered.isEmpty
+            ? L10n.tr("menu.disconnected_generic")
+            : L10n.format("menu.disconnected_device", truncated(remembered))
     }
 
     private func truncated(_ name: String, limit: Int = 32) -> String {
@@ -632,7 +665,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let devices = AudioDevices.inputDevices()
         let selected = Defaults.micUID
 
-        let systemDefault = NSMenuItem(title: "System default", action: #selector(selectMic(_:)), keyEquivalent: "")
+        let systemDefault = NSMenuItem(
+            title: L10n.tr("menu.system_default"),
+            action: #selector(selectMic(_:)),
+            keyEquivalent: ""
+        )
         systemDefault.target = self
         systemDefault.representedObject = ""
         systemDefault.state = selected.isEmpty ? .on : .off
@@ -651,15 +688,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         // isn't silently missing from the whole list.
         if !selected.isEmpty, !devices.contains(where: { $0.uid == selected }) {
             menu.addItem(.separator())
-            let name = Defaults.micName.isEmpty ? "已选设备" : Defaults.micName
-            let missing = NSMenuItem(title: "\(name)（未连接）", action: nil, keyEquivalent: "")
+            let name = Defaults.micName.isEmpty ? L10n.tr("menu.selected_device") : Defaults.micName
+            let missing = NSMenuItem(
+                title: L10n.format("menu.disconnected_device", name),
+                action: nil,
+                keyEquivalent: ""
+            )
             missing.state = .on
             menu.addItem(missing)
         }
 
         if state != .idle {
             menu.addItem(.separator())
-            let note = NSMenuItem(title: "切换将在下一次听写生效", action: nil, keyEquivalent: "")
+            let note = NSMenuItem(
+                title: L10n.tr("menu.change_next_dictation"),
+                action: nil,
+                keyEquivalent: ""
+            )
             menu.addItem(note)
         }
     }
@@ -669,7 +714,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func selectMic(_ sender: NSMenuItem) {
         guard let uid = sender.representedObject as? String else { return }
         Defaults.setMic(uid: uid, name: sender.title)
-        micItem.title = "Microphone: \(currentMicLabel())"
+        micItem.title = "\(L10n.tr("menu.microphone")): \(currentMicLabel())"
     }
 
     // MARK: - History menu
@@ -678,7 +723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.removeAllItems()
         let items = TranscriptHistory.all()
         guard !items.isEmpty else {
-            let empty = NSMenuItem(title: "（暂无转录）", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: L10n.tr("menu.no_transcripts"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
             return
@@ -689,11 +734,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let item = NSMenuItem(title: title, action: #selector(copyHistoryItem(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = text
-            item.toolTip = "点按复制到剪贴板"
+            item.toolTip = L10n.tr("menu.copy_hint")
             menu.addItem(item)
         }
         menu.addItem(.separator())
-        let clear = NSMenuItem(title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+        let clear = NSMenuItem(
+            title: L10n.tr("menu.clear_history"),
+            action: #selector(clearHistory),
+            keyEquivalent: ""
+        )
         clear.target = self
         menu.addItem(clear)
     }
@@ -721,7 +770,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if enabled, !Permissions.hasScreenCaptureAccess {
             let granted = Permissions.requestScreenCapture()
             if !granted {
-                notify("已开启电脑音频。请在“系统设置 → 隐私与安全性 → 屏幕与系统音频录制”中授权 Murmur；授权前会自动使用麦克风。")
+                notify(L10n.tr("alert.computer_audio_permission"))
             }
         }
     }
@@ -734,11 +783,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         hotkey.keyCode = Defaults.hotkeyCode()
     }
 
+    @objc private func appLanguageChanged() {
+        localizeMainMenu()
+        settingsWindow?.title = L10n.tr("app.settings_title")
+    }
+
     @objc func openSettings(_ sender: Any?) {
         if settingsWindow == nil {
             let hosting = NSHostingController(rootView: SettingsView())
             let window = NSWindow(contentViewController: hosting)
-            window.title = "Murmur Settings"
+            window.title = L10n.tr("app.settings_title")
             window.styleMask = [.titled, .closable]
             window.isReleasedWhenClosed = false
             window.delegate = self

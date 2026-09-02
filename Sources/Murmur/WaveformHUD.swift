@@ -83,7 +83,7 @@ private struct WaveformStackView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             if hiddenCount > 0 {
-                Text("+\(hiddenCount) 个处理中")
+                Text(L10n.format("hud.hidden_processing", hiddenCount))
                     .font(.system(size: 10, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.72))
                     .padding(.horizontal, 10)

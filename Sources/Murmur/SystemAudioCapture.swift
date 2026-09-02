@@ -99,11 +99,11 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         ) { [weak self] content, error in
             guard let self, !self.isStopped else { return }
             if let error {
-                self.report("无法读取电脑音频：\(error.localizedDescription)")
+                self.report(L10n.format("error.system_audio_read", error.localizedDescription))
                 return
             }
             guard let display = content?.displays.first else {
-                self.report("无法读取电脑音频：没有可捕获的显示器")
+                self.report(L10n.tr("error.system_audio_no_display"))
                 return
             }
 
@@ -127,7 +127,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             do {
                 try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: self.sampleQueue)
             } catch {
-                self.report("无法初始化电脑音频：\(error.localizedDescription)")
+                self.report(L10n.format("error.system_audio_init", error.localizedDescription))
                 return
             }
 
@@ -142,7 +142,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             stream.startCapture { [weak self, weak stream] error in
                 guard let self, !self.isStopped else { return }
                 if let error {
-                    self.report("电脑音频捕获失败：\(error.localizedDescription)")
+                    self.report(L10n.format("error.system_audio_capture", error.localizedDescription))
                     self.clear(stream: stream)
                 }
             }
@@ -177,7 +177,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         guard !isStopped else { return }
-        report("电脑音频已停止：\(error.localizedDescription)")
+        report(L10n.format("error.system_audio_stopped", error.localizedDescription))
         clear(stream: stream)
     }
 

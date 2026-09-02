@@ -10,6 +10,8 @@ Package.resolved
 build/
 *.app
 *.dmg
+*.zip
+DerivedData/
 
 # Xcode user data
 xcuserdata/

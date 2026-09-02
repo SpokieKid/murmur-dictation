@@ -11,13 +11,17 @@ BUNDLE="build/$APP"
 echo "▸ Compiling ($CONFIG)…"
 swift build -c "$CONFIG"
 
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/Murmur"
+BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
+BIN="$BIN_DIR/Murmur"
 
 echo "▸ Assembling ${APP}…"
 rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS" "$BUNDLE/Contents/Resources"
 cp "$BIN" "$BUNDLE/Contents/MacOS/Murmur"
 cp Resources/Info.plist "$BUNDLE/Contents/Info.plist"
+if [ -d "$BIN_DIR/Murmur_Murmur.bundle" ]; then
+    ditto "$BIN_DIR/Murmur_Murmur.bundle" "$BUNDLE/Contents/Resources/Murmur_Murmur.bundle"
+fi
 
 # Prefer a stable signing identity so macOS TCC keeps Accessibility / Input
 # Monitoring / Microphone grants across rebuilds. Developer ID also lets the

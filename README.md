@@ -1,5 +1,11 @@
 # Murmur 🎙️
 
+[简体中文](README.zh-CN.md)
+
+[![CI](https://github.com/SpokieKid/Murmur/actions/workflows/ci.yml/badge.svg)](https://github.com/SpokieKid/Murmur/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black.svg)](https://www.apple.com/macos/)
+
 A tiny macOS menu-bar dictation app in the spirit of **Wispr Flow** and **Typeless** —
 but you bring your **own ASR API**. Hold a key, speak, release, and your words are
 transcribed and pasted at the cursor in whatever app is focused.
@@ -7,9 +13,8 @@ transcribed and pasted at the cursor in whatever app is focused.
 No subscription, no vendor lock-in. Point it at OpenAI Whisper, Groq, a local
 `whisper.cpp` server, or Alibaba's **Qwen3-ASR (`qwen3-asr-flash`)**.
 
-**Ships working out of the box** — pre-configured for DashScope `qwen3-asr-flash`
-(ASR) + `qwen3.8-flash` (LLM polish) with a bundled API key. Just grant permissions
-and start talking.
+Murmur is open source and uses your own API credentials. Configure an OpenAI-compatible
+ASR endpoint or Alibaba Cloud Model Studio, grant the macOS permissions, and start talking.
 
 ## Features
 
@@ -18,6 +23,8 @@ and start talking.
   so remote participants in Zoom, Meet, Teams, Feishu, browser calls, and videos are
   transcribed alongside your own voice. Toggle it directly from the menu bar when you
   switch between meetings and music; Murmur's own cue sounds are excluded.
+- 🌐 **English + 简体中文 UI** — follow the Mac's language or switch instantly in
+  **General → Language**, without relaunching the app.
 - ⚡️ **Keep talking while Murmur works** — press the trigger again (including Fn) while
   earlier audio is still transcribing or polishing. Takes run in parallel, then paste in
   the exact order they were recorded.
@@ -55,7 +62,7 @@ and start talking.
 
 It lives in the menu bar (🎙️). No Dock icon, no window unless you open Settings.
 
-## Build & run
+## Quick start
 
 ```bash
 ./build.sh            # compiles + assembles build/Murmur.app (ad-hoc signed)
@@ -63,6 +70,9 @@ open build/Murmur.app
 ```
 
 Requires Xcode / Swift 6 toolchain (tested on Swift 6.3, macOS 26).
+
+Then open **menu → Settings…** and enter an API key for your ASR provider. API keys are
+stored locally in macOS user defaults and are never committed to this repository.
 
 ## First-run permissions
 
@@ -114,12 +124,12 @@ that exposes playback audio. Murmur captures audio only (no screen frames are st
 mixes it with the selected microphone in real time, and sends the same 16 kHz mono stream
 through the existing ASR pipeline. If permission or system capture is unavailable, the
 current take falls back to microphone-only recording and marks that state in the HUD.
-After setup, use **menu bar → 监听电脑音频** as the everyday shortcut. A checked item
+After setup, use **menu bar → Include Computer Audio / 收录电脑声音** as the everyday shortcut. A checked item
 means computer audio is included; clear it while listening to music. If changed during a
 recording, the new choice takes effect on the next dictation.
 
-The bundled defaults (DashScope qwen3-asr-flash + qwen3.8-flash) are filled in already;
-override any of them per the formats below.
+Provider endpoint and model presets are included for convenience; enter your own API key
+using one of the formats below.
 
 ## Configuring your ASR provider
 

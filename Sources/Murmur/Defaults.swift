@@ -69,6 +69,9 @@ enum Defaults {
             // 403'd out 2026-08-09; fun-asr snapshots still have their own.
             "model": "fun-asr-flash-2026-06-15",
             "language": "auto",
+            // "system", "en", or "zh-Hans". This controls Murmur's UI only;
+            // the ASR language remains configured by the separate key above.
+            "appLanguage": "system",
             "hotkey": "rightOption",
             "triggerMode": "toggle", // "toggle" = press once to start, again to stop; "hold" = push-to-talk
             "micUID": "",            // "" = system default input
@@ -239,6 +242,7 @@ enum Defaults {
     static var useRealtimeASR: Bool { UserDefaults.standard.bool(forKey: "useRealtimeASR") }
 
     static var triggerMode: String { UserDefaults.standard.string(forKey: "triggerMode") ?? "toggle" }
+    static var appLanguage: String { UserDefaults.standard.string(forKey: "appLanguage") ?? "system" }
     static var micUID: String { UserDefaults.standard.string(forKey: "micUID") ?? "" }
     static var micName: String { UserDefaults.standard.string(forKey: "micName") ?? "" }
 

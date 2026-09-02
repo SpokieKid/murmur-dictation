@@ -1,10 +1,6 @@
 import SwiftUI
 import AppKit
 
-extension Notification.Name {
-    static let hotkeyChanged = Notification.Name("MurmurHotkeyChanged")
-}
-
 struct SettingsView: View {
     @AppStorage("provider") private var provider = Defaults.providerOpenAI
     @AppStorage("endpoint") private var endpoint = ""
@@ -18,6 +14,7 @@ struct SettingsView: View {
     @AppStorage("playSounds") private var playSounds = true
     @AppStorage("showWaveform") private var showWaveform = true
     @AppStorage("captureSystemAudio") private var captureSystemAudio = false
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.system.rawValue
 
     @AppStorage("llmEnabled") private var llmEnabled = true
     @AppStorage("llmEndpoint") private var llmEndpoint = ""
@@ -34,12 +31,13 @@ struct SettingsView: View {
 
     var body: some View {
         TabView {
-            asrTab.tabItem { Label("ASR", systemImage: "waveform") }
-            polishTab.tabItem { Label("Polish", systemImage: "wand.and.stars") }
-            vocabTab.tabItem { Label("Vocabulary", systemImage: "text.book.closed") }
-            generalTab.tabItem { Label("General", systemImage: "gearshape") }
+            asrTab.tabItem { Label(L10n.tr("tab.asr"), systemImage: "waveform") }
+            polishTab.tabItem { Label(L10n.tr("tab.polish"), systemImage: "wand.and.stars") }
+            vocabTab.tabItem { Label(L10n.tr("tab.vocabulary"), systemImage: "text.book.closed") }
+            generalTab.tabItem { Label(L10n.tr("tab.general"), systemImage: "gearshape") }
         }
-        .frame(width: 500, height: 540)
+        .id(appLanguage)
+        .frame(width: 520, height: 600)
         .padding()
         .onAppear {
             devices = AudioDevices.inputDevices()
@@ -54,29 +52,29 @@ struct SettingsView: View {
 
     private var asrTab: some View {
         Form {
-            Section("Speech-to-text provider") {
-                Picker("Format", selection: $provider) {
-                    Text("阿里百炼 · FunASR (fun-asr-flash)").tag(Defaults.providerDashScope)
-                    Text("OpenAI 兼容 (Whisper / Groq / 本地)").tag(Defaults.providerOpenAI)
+            Section(L10n.tr("settings.asr_provider")) {
+                Picker(L10n.tr("settings.format"), selection: $provider) {
+                    Text(L10n.tr("settings.dashscope_provider")).tag(Defaults.providerDashScope)
+                    Text(L10n.tr("settings.openai_provider")).tag(Defaults.providerOpenAI)
                 }
                 .onChange(of: provider) { newValue in
                     endpoint = Defaults.presetEndpoint(for: newValue)
                     model = Defaults.presetModel(for: newValue)
                 }
-                TextField("Endpoint URL", text: $endpoint)
-                SecureField("API Key", text: $apiKey)
-                TextField("Model", text: $model)
-                TextField("Language (ISO code or 'auto')", text: $language)
+                TextField(L10n.tr("settings.endpoint"), text: $endpoint)
+                SecureField(L10n.tr("settings.api_key"), text: $apiKey)
+                TextField(L10n.tr("settings.model"), text: $model)
+                TextField(L10n.tr("settings.asr_language"), text: $language)
             }
             Section {
-                Text("百炼 qwen3-asr-flash 只在原生 multimodal-generation 端点可用；compatible-mode 不支持语音转录（会返回 404），别填成兼容模式地址。")
+                Text(L10n.tr("settings.dashscope_endpoint_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if provider == Defaults.providerDashScope {
-                Section("Streaming (beta)") {
-                    Toggle("Use realtime streaming ASR (paraformer-realtime)", isOn: $useRealtimeASR)
-                    Text("Uploads audio over a WebSocket as you speak instead of after you release the key — usually faster, but this is a different model from qwen3-asr-flash so accuracy may differ. Falls back to the batch upload above if the realtime connection fails.")
+                Section(L10n.tr("settings.streaming")) {
+                    Toggle(L10n.tr("settings.streaming_toggle"), isOn: $useRealtimeASR)
+                    Text(L10n.tr("settings.streaming_hint"))
                         .font(.callout).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -89,27 +87,27 @@ struct SettingsView: View {
 
     private var polishTab: some View {
         Form {
-            Section("LLM polish") {
-                Toggle("Clean up transcript with an LLM", isOn: $llmEnabled)
-                Text("After transcription, a small/fast model fixes punctuation, removes filler words, and applies your vocabulary.")
+            Section(L10n.tr("settings.llm_polish")) {
+                Toggle(L10n.tr("settings.llm_polish_toggle"), isOn: $llmEnabled)
+                Text(L10n.tr("settings.llm_polish_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Toggle("Apply spoken corrections (voice self-edit)", isOn: $voiceEdit)
+                Toggle(L10n.tr("settings.voice_edit_toggle"), isOn: $voiceEdit)
                     .disabled(!llmEnabled)
-                Text("Say a correction out loud and it's applied instead of typed — e.g. “…scratch that…”, “change Sam to Alex”, “把张三改成李四”. A “change X to Y” that's part of a message you're dictating for someone else is kept as-is.")
+                Text(L10n.tr("settings.voice_edit_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section("Model") {
-                TextField("Chat endpoint URL", text: $llmEndpoint)
-                SecureField("API Key", text: $llmApiKey)
-                TextField("Model", text: $llmModel)
-                Text("默认使用百炼的 qwen3.8-flash；兼容模式 base：https://dashscope.aliyuncs.com/compatible-mode/v1 （末尾接 /chat/completions）。")
+            Section(L10n.tr("settings.model")) {
+                TextField(L10n.tr("settings.endpoint"), text: $llmEndpoint)
+                SecureField(L10n.tr("settings.api_key"), text: $llmApiKey)
+                TextField(L10n.tr("settings.model"), text: $llmModel)
+                Text(L10n.tr("settings.llm_model_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .disabled(!llmEnabled)
-            Section("Instruction") {
+            Section(L10n.tr("settings.instruction")) {
                 TextEditor(text: $llmPrompt)
                     .font(.system(size: 12, design: .monospaced))
                     .frame(height: 120)
@@ -123,8 +121,8 @@ struct SettingsView: View {
 
     private var vocabTab: some View {
         Form {
-            Section("Custom vocabulary") {
-                Text("One term per line. These bias the ASR toward correct spellings (names, jargon, brands) and are passed to the polish step.")
+            Section(L10n.tr("settings.custom_vocabulary")) {
+                Text(L10n.tr("settings.vocabulary_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 TextEditor(text: $vocabulary)
@@ -139,9 +137,22 @@ struct SettingsView: View {
 
     private var generalTab: some View {
         Form {
-            Section("Microphone") {
-                Picker("Input device", selection: $micUID) {
-                    Text("System default").tag("")
+            Section(L10n.tr("settings.language_section")) {
+                Picker(L10n.tr("settings.app_language"), selection: $appLanguage) {
+                    Text(L10n.tr("settings.language_system")).tag(AppLanguage.system.rawValue)
+                    Text(L10n.tr("settings.language_chinese")).tag(AppLanguage.simplifiedChinese.rawValue)
+                    Text(L10n.tr("settings.language_english")).tag(AppLanguage.english.rawValue)
+                }
+                .onChange(of: appLanguage) { _ in
+                    NotificationCenter.default.post(name: .appLanguageChanged, object: nil)
+                }
+                Text(L10n.tr("settings.language_hint"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Section(L10n.tr("settings.microphone")) {
+                Picker(L10n.tr("settings.input_device"), selection: $micUID) {
+                    Text(L10n.tr("menu.system_default")).tag("")
                     ForEach(devices) { device in
                         Text(device.name).tag(device.uid)
                     }
@@ -152,37 +163,39 @@ struct SettingsView: View {
                     let name = devices.first(where: { $0.uid == uid })?.name ?? ""
                     Defaults.setMic(uid: uid, name: name)
                 }
-                Button("Refresh devices") { devices = AudioDevices.inputDevices() }
-                Text("也可以直接从菜单栏图标 → Microphone 里切换。")
+                Button(L10n.tr("settings.refresh_devices")) { devices = AudioDevices.inputDevices() }
+                Text(L10n.tr("settings.microphone_menu_hint"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Section("Meeting audio") {
-                Toggle("Capture computer audio", isOn: $captureSystemAudio)
+            Section(L10n.tr("settings.meeting_audio")) {
+                Toggle(L10n.tr("settings.include_computer_audio"), isOn: $captureSystemAudio)
                     .onChange(of: captureSystemAudio) { enabled in
                         guard enabled else { return }
                         screenCaptureGranted = Permissions.requestScreenCapture()
                     }
                 HStack {
-                    Text(screenCaptureGranted ? "✓ 屏幕与系统音频录制已授权" : "需要屏幕与系统音频录制权限")
+                    Text(L10n.tr(screenCaptureGranted
+                        ? "settings.screen_audio_authorized"
+                        : "settings.screen_audio_required"))
                         .font(.caption)
                         .foregroundStyle(screenCaptureGranted ? .green : .secondary)
                     Spacer()
-                    Button("打开系统设置") {
+                    Button(L10n.tr("settings.open_system_settings")) {
                         Permissions.openScreenCaptureSettings()
                     }
                 }
-                Text("开启后，Murmur 会把麦克风与电脑正在播放的声音实时混合。适合在线会议中同时识别你和对方的发言；Murmur 自己的声音会被排除。")
+                Text(L10n.tr("settings.computer_audio_hint"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section("Dictation") {
-                Picker("Trigger", selection: $triggerMode) {
-                    Text("Press once to start, again to stop").tag("toggle")
-                    Text("Hold to talk (push-to-talk)").tag("hold")
+            Section(L10n.tr("settings.dictation")) {
+                Picker(L10n.tr("settings.trigger"), selection: $triggerMode) {
+                    Text(L10n.tr("settings.trigger_toggle")).tag("toggle")
+                    Text(L10n.tr("settings.trigger_hold")).tag("hold")
                 }
-                Picker("Trigger key", selection: $hotkey) {
+                Picker(L10n.tr("settings.trigger_key"), selection: $hotkey) {
                     Text("Right ⌥ Option").tag("rightOption")
                     Text("Right ⌘ Command").tag("rightCommand")
                     Text("Right ⌃ Control").tag("rightControl")
@@ -192,13 +205,13 @@ struct SettingsView: View {
                     NotificationCenter.default.post(name: .hotkeyChanged, object: nil)
                 }
             }
-            Section("Feedback") {
-                Toggle("Show waveform while recording", isOn: $showWaveform)
-                Toggle("Restore clipboard after pasting", isOn: $restoreClipboard)
-                Toggle("Play start/stop sounds", isOn: $playSounds)
+            Section(L10n.tr("settings.feedback")) {
+                Toggle(L10n.tr("settings.show_waveform"), isOn: $showWaveform)
+                Toggle(L10n.tr("settings.restore_clipboard"), isOn: $restoreClipboard)
+                Toggle(L10n.tr("settings.play_sounds"), isOn: $playSounds)
             }
             Section {
-                Text("转写或润色仍在处理中时，不用等待：继续按所选触发键（包括 Fn）即可录下一段。多个任务会并行处理，并严格按录音顺序粘贴。需要麦克风、辅助功能与输入监控权限。")
+                Text(L10n.tr("settings.parallel_hint"))
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
