@@ -13,10 +13,11 @@ Composition/framing: 3:4 vertical; small brand label at top; large headline in u
 Color palette: near-black typography, warm off-white background, one vivid vermilion-red accent only
 Text (verbatim, render every character exactly and add no other text):
 “MURMUR / OPEN SOURCE”
-“语音输入，
-为什么还要等？”
-“01  处理中，也能继续说”
-“02  电脑里的声音，也能转文字”
+“不用等转写，
+线上开会时，
+同事的话也能变文字”
+“01  上一段处理中，也能继续说”
+“02  线上会议里，同事的话也能转文字”
 “Murmur 现在开源”
 Typography: bold modern simplified-Chinese sans serif for headline; clean grotesk sans serif elsewhere; perfect kerning; high mobile-feed legibility
 Constraints: exactly the five quoted text blocks above; preserve Chinese wording verbatim; strict 3:4 ratio; simple enough to understand in one second; the two numbered lines are the only feature claims
