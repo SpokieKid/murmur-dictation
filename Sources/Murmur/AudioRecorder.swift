@@ -1,7 +1,7 @@
 import AVFoundation
 
-/// Captures microphone audio with an **AVCaptureSession** (input only) and
-/// produces 16 kHz mono 16-bit PCM WAV.
+/// Captures microphone audio with an **AVCaptureSession** and optionally mixes
+/// ScreenCaptureKit system playback, producing a 16 kHz mono 16-bit PCM WAV.
 ///
 /// Why not AVAudioEngine: the engine spins up an output IO unit too, which
 /// briefly interrupts whatever audio is currently playing (music ducks/glitches
@@ -10,10 +10,9 @@ import AVFoundation
 /// to change the system-wide default input.
 final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate {
     private var session: AVCaptureSession?
-    private var converter: AVAudioConverter?
-    private var inFormat: AVAudioFormat?
-    private let outFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32,
-                                          sampleRate: 16_000, channels: 1, interleaved: false)!
+    private let microphoneConverter = AudioSampleConverter()
+    private var systemAudioCapture: SystemAudioCapture?
+    private var mixer: LiveAudioMixer?
     private let targetSampleRate: Double = 16_000
     private let queue = DispatchQueue(label: "com.murmur.capture")
 
@@ -25,11 +24,17 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     /// Called on the main thread with a normalised 0...1 level for UI metering.
     var onLevel: ((Float) -> Void)?
 
-    /// Fired on the capture queue with each newly-captured chunk of raw PCM16LE
-    /// mono 16kHz audio (no WAV header) — lets a streaming transcriber upload
-    /// audio as it's recorded instead of waiting for `stop()`. Independent of
-    /// the `samples` accumulation below, which keeps feeding the batch/WAV path.
+    /// Fired with each newly-captured or mixed chunk of raw PCM16LE mono 16 kHz
+    /// audio (no WAV header) so realtime ASR receives the same signal as the
+    /// batch WAV path.
     var onPCMChunk: ((Data) -> Void)?
+
+    /// When enabled, ScreenCaptureKit playback audio is mixed with the selected
+    /// microphone. The owner should only enable this after Screen Recording
+    /// permission has been granted.
+    var captureSystemAudio = false
+    /// Non-fatal: microphone recording continues if system audio fails.
+    var onSystemAudioError: ((String) -> Void)?
 
     /// UID (AVCaptureDevice.uniqueID) of the mic to record from; nil/empty = default.
     var deviceUID: String?
@@ -69,8 +74,7 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
         peakLevel = 0
         lastWarnedSecond = -1
         limitFired = false
-        converter = nil
-        inFormat = nil
+        microphoneConverter.reset()
 
         let device = AudioDevices.device(forUID: deviceUID ?? "") ?? AVCaptureDevice.default(for: .audio)
         guard let device = device else { throw err("没有可用的音频输入设备。") }
@@ -85,17 +89,37 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
         guard session.canAddOutput(output) else { throw err("无法初始化音频采集。") }
         session.addOutput(output)
 
+        if captureSystemAudio {
+            let mixer = LiveAudioMixer { [weak self] mixed in self?.consume(mixed) }
+            self.mixer = mixer
+            mixer.start()
+
+            let systemCapture = SystemAudioCapture()
+            systemCapture.onSamples = { [weak mixer] samples in
+                mixer?.append(samples, from: .system)
+            }
+            systemCapture.onError = { [weak self] message in
+                self?.onSystemAudioError?(message)
+            }
+            systemAudioCapture = systemCapture
+        }
+
         session.startRunning()
         self.session = session
         isRecording = true
+        systemAudioCapture?.start()
     }
 
     /// Stops capture and returns the recorded audio as WAV data.
     func stop() -> Data {
         guard isRecording, let session = session else { return Data() }
         session.stopRunning()
+        systemAudioCapture?.stop()
+        systemAudioCapture = nil
         self.session = nil
         isRecording = false
+        mixer?.stop()
+        mixer = nil
 
         lock.lock(); let captured = samples; lock.unlock()
         return Self.encodeWAV(samples: captured, sampleRate: Int(targetSampleRate))
@@ -106,52 +130,25 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
     func captureOutput(_ output: AVCaptureOutput,
                        didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
-        guard let pcm = makePCMBuffer(sampleBuffer) else { return }
-        process(pcm)
+        guard let converted = microphoneConverter.convert(sampleBuffer), !converted.isEmpty else { return }
+        if captureSystemAudio, let mixer {
+            mixer.append(converted, from: .microphone)
+        } else {
+            consume(converted)
+        }
     }
 
-    private func makePCMBuffer(_ sb: CMSampleBuffer) -> AVAudioPCMBuffer? {
-        guard let desc = CMSampleBufferGetFormatDescription(sb),
-              let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc),
-              let format = AVAudioFormat(streamDescription: asbd) else { return nil }
-        let frames = AVAudioFrameCount(CMSampleBufferGetNumSamples(sb))
-        guard frames > 0, let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return nil }
-        buf.frameLength = frames
-        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
-            sb, at: 0, frameCount: Int32(frames), into: buf.mutableAudioBufferList)
-        return status == noErr ? buf : nil
-    }
-
-    private func process(_ buffer: AVAudioPCMBuffer) {
-        if converter == nil || !(inFormat?.isEqual(buffer.format) ?? false) {
-            converter = AVAudioConverter(from: buffer.format, to: outFormat)
-            inFormat = buffer.format
-        }
-        guard let converter = converter else { return }
-        let ratio = outFormat.sampleRate / buffer.format.sampleRate
-        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 1024
-        guard let out = AVAudioPCMBuffer(pcmFormat: outFormat, frameCapacity: capacity) else { return }
-
-        var fed = false
-        var convErr: NSError?
-        converter.convert(to: out, error: &convErr) { _, status in
-            if fed { status.pointee = .noDataNow; return nil }
-            fed = true
-            status.pointee = .haveData
-            return buffer
-        }
-        guard convErr == nil, let channel = out.floatChannelData else { return }
-        let count = Int(out.frameLength)
+    private func consume(_ converted: [Float]) {
+        let count = converted.count
         guard count > 0 else { return }
-        let ptr = channel[0]
         lock.lock()
-        samples.append(contentsOf: UnsafeBufferPointer(start: ptr, count: count))
+        samples.append(contentsOf: converted)
         lock.unlock()
 
         if let onPCMChunk = onPCMChunk {
             var pcm16 = [Int16](repeating: 0, count: count)
             for i in 0..<count {
-                let clamped = max(-1.0, min(1.0, ptr[i]))
+                let clamped = max(-1.0, min(1.0, converted[i]))
                 pcm16[i] = Int16(clamped * 32_767).littleEndian
             }
             let chunk = pcm16.withUnsafeBufferPointer { Data(buffer: $0) }
@@ -160,7 +157,7 @@ final class AudioRecorder: NSObject, AVCaptureAudioDataOutputSampleBufferDelegat
 
         bufferCount += 1
         var sum: Float = 0
-        for i in 0..<count { let v = ptr[i]; sum += v * v }
+        for value in converted { sum += value * value }
         let rms = (sum / Float(count)).squareRoot()
         if rms > peakLevel { peakLevel = rms }
 

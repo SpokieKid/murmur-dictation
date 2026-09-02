@@ -14,6 +14,9 @@ and start talking.
 ## Features
 
 - 🎙️ **Push-to-talk dictation** — hold a key, speak, release; text appears at the cursor.
+- 🖥️ **Meeting / computer audio** — optionally mix macOS playback with the microphone,
+  so remote participants in Zoom, Meet, Teams, Feishu, browser calls, and videos are
+  transcribed alongside your own voice. Murmur's own cue sounds are excluded.
 - ⚡️ **Keep talking while Murmur works** — press the trigger again (including Fn) while
   earlier audio is still transcribing or polishing. Takes run in parallel, then paste in
   the exact order they were recorded.
@@ -70,6 +73,7 @@ macOS gates everything Murmur needs behind privacy permissions. Use **menu →
 | **Microphone**     | record your voice                            |
 | **Accessibility**  | synthesise ⌘V to paste at the cursor         |
 | **Input Monitoring** | detect the push-to-talk key in other apps  |
+| **Screen & System Audio Recording** | capture the other side of online meetings |
 
 After granting, quit and relaunch Murmur once so the permissions take effect.
 
@@ -84,7 +88,8 @@ Open **menu → Settings…** — four tabs:
 - **Polish** — toggle LLM cleanup, its endpoint/key/model, the instruction prompt, and
   **voice self-edit** (apply spoken corrections like "scratch that" / "change X to Y").
 - **Vocabulary** — one term per line; biases ASR and is passed to the polish step.
-- **General** — microphone device, trigger mode + key, waveform toggle, clipboard, sounds.
+- **General** — microphone device, meeting/computer audio, trigger mode + key, waveform,
+  clipboard, and sounds.
 
 ### Trigger modes
 
@@ -99,6 +104,15 @@ Open **menu → Settings…** — four tabs:
 
 Pick any CoreAudio input device under **General → Microphone**, or leave it on
 "System default". The choice is remembered by device UID across replug/reboot.
+
+### Meeting / computer audio
+
+Enable **General → Meeting audio → Capture computer audio**. macOS will ask for
+**Screen & System Audio Recording** permission because ScreenCaptureKit is the system API
+that exposes playback audio. Murmur captures audio only (no screen frames are stored),
+mixes it with the selected microphone in real time, and sends the same 16 kHz mono stream
+through the existing ASR pipeline. If permission or system capture is unavailable, the
+current take falls back to microphone-only recording and marks that state in the HUD.
 
 The bundled defaults (DashScope qwen3-asr-flash + qwen3.8-flash) are filled in already;
 override any of them per the formats below.

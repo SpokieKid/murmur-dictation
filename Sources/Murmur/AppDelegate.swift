@@ -99,6 +99,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                                                name: .hotkeyChanged, object: nil)
 
         Permissions.requestMicrophone()
+        if Defaults.captureSystemAudio, !Permissions.hasScreenCaptureAccess {
+            // The user explicitly enabled meeting audio. Ask once shortly after
+            // launch so the first dictation does not begin behind a permission
+            // sheet and miss the start of the conversation.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                _ = Permissions.requestScreenCapture()
+            }
+        }
         if !Permissions.isAccessibilityTrusted() {
             // First launch: nudge the user toward granting permissions.
             openSettings(nil)
@@ -185,10 +193,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let id = self.nextJobID
             let sequence = id
             let asrConfig = Defaults.config()
+            let wantsSystemAudio = Defaults.captureSystemAudio
+            let systemAudioGranted = wantsSystemAudio && Permissions.requestScreenCapture()
             var realtime: RealtimeTranscriber?
             do {
                 self.recorder.deviceUID = Defaults.micUID
+                self.recorder.captureSystemAudio = systemAudioGranted
                 self.recorder.onLevel = { [weak self] level in self?.hud.update(id: id, level: level) }
+                self.recorder.onSystemAudioError = { [weak self] message in
+                    self?.handleSystemAudioFailure(for: id, message: message)
+                }
                 self.playedLimitWarning = false
                 self.recorder.maxDuration = Defaults.maxRecordingSeconds()
                 self.recorder.warnLeadSeconds = Defaults.recordingWarnLeadSeconds
@@ -211,7 +225,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 // Escape aborts the take; live only for the duration of a dictation
                 // so the key keeps working normally everywhere else.
                 if Defaults.showWaveform {
-                    self.hud.start(id: id, sequence: sequence, status: "Listening… ⎋ 取消")
+                    let status = systemAudioGranted
+                        ? "Listening… · 麦克风 + 电脑音频"
+                        : "Listening… ⎋ 取消"
+                    self.hud.start(id: id, sequence: sequence, status: status)
+                    if wantsSystemAudio, !systemAudioGranted {
+                        self.hud.warn(id: id, status: "仅麦克风 · 请授权电脑音频")
+                    }
                 }
                 if Defaults.playSounds { NSSound(named: "Tink")?.play() }
                 // Warm the ASR/LLM connections while the user is still
@@ -246,8 +266,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func endDictation() {
         guard let recording = currentRecording else { return }
-        clearRecorderCallbacks()
         let wav = recorder.stop()
+        // `stop()` drains the mixer's short jitter buffer. Keep realtime ASR's
+        // PCM callback attached until that final audio has been emitted.
+        clearRecorderCallbacks()
         let seconds = recorder.duration
         let buffers = recorder.bufferCount
         let peak = recorder.peakLevel
@@ -392,9 +414,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func clearRecorderCallbacks() {
         recorder.onLevel = nil
+        recorder.onSystemAudioError = nil
         recorder.onApproachingLimit = nil
         recorder.onLimitReached = nil
         recorder.onPCMChunk = nil
+    }
+
+    private func handleSystemAudioFailure(for id: Int, message: String) {
+        guard currentRecording?.id == id else { return }
+        perfLog.error("system audio job=\(id) error=\(message, privacy: .public)")
+        if Defaults.showWaveform {
+            hud.warn(id: id, status: "电脑音频不可用 · 仅麦克风")
+        }
     }
 
     private func updateJobStage(_ id: Int, status: String) {

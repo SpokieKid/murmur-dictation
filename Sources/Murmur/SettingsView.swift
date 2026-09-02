@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 extension Notification.Name {
     static let hotkeyChanged = Notification.Name("MurmurHotkeyChanged")
@@ -16,6 +17,7 @@ struct SettingsView: View {
     @AppStorage("restoreClipboard") private var restoreClipboard = true
     @AppStorage("playSounds") private var playSounds = true
     @AppStorage("showWaveform") private var showWaveform = true
+    @AppStorage("captureSystemAudio") private var captureSystemAudio = false
 
     @AppStorage("llmEnabled") private var llmEnabled = true
     @AppStorage("llmEndpoint") private var llmEndpoint = ""
@@ -28,6 +30,7 @@ struct SettingsView: View {
     @AppStorage("useRealtimeASR") private var useRealtimeASR = true
 
     @State private var devices: [AudioInputDevice] = []
+    @State private var screenCaptureGranted = false
 
     var body: some View {
         TabView {
@@ -38,7 +41,13 @@ struct SettingsView: View {
         }
         .frame(width: 500, height: 540)
         .padding()
-        .onAppear { devices = AudioDevices.inputDevices() }
+        .onAppear {
+            devices = AudioDevices.inputDevices()
+            screenCaptureGranted = Permissions.hasScreenCaptureAccess
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            screenCaptureGranted = Permissions.hasScreenCaptureAccess
+        }
     }
 
     // MARK: - ASR
@@ -147,6 +156,26 @@ struct SettingsView: View {
                 Text("也可以直接从菜单栏图标 → Microphone 里切换。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section("Meeting audio") {
+                Toggle("Capture computer audio", isOn: $captureSystemAudio)
+                    .onChange(of: captureSystemAudio) { enabled in
+                        guard enabled else { return }
+                        screenCaptureGranted = Permissions.requestScreenCapture()
+                    }
+                HStack {
+                    Text(screenCaptureGranted ? "✓ 屏幕与系统音频录制已授权" : "需要屏幕与系统音频录制权限")
+                        .font(.caption)
+                        .foregroundStyle(screenCaptureGranted ? .green : .secondary)
+                    Spacer()
+                    Button("打开系统设置") {
+                        Permissions.openScreenCaptureSettings()
+                    }
+                }
+                Text("开启后，Murmur 会把麦克风与电脑正在播放的声音实时混合。适合在线会议中同时识别你和对方的发言；Murmur 自己的声音会被排除。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("Dictation") {
                 Picker("Trigger", selection: $triggerMode) {

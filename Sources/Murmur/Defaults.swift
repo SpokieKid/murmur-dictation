@@ -77,6 +77,10 @@ enum Defaults {
             "restoreClipboard": true,
             "playSounds": true,
             "showWaveform": true,
+            // Mix macOS playback (meeting participants, videos, etc.) into the
+            // transcription. Off by default because it requires Screen
+            // Recording permission; users explicitly opt in under General.
+            "captureSystemAudio": false,
             // LLM polish — Qwen3.8 Flash via DashScope's OpenAI-compatible chat endpoint.
             "llmEnabled": true,
             "llmEndpoint": defaultLLMEndpoint,
@@ -248,6 +252,7 @@ enum Defaults {
     static var restoreClipboard: Bool { UserDefaults.standard.bool(forKey: "restoreClipboard") }
     static var playSounds: Bool { UserDefaults.standard.bool(forKey: "playSounds") }
     static var showWaveform: Bool { UserDefaults.standard.bool(forKey: "showWaveform") }
+    static var captureSystemAudio: Bool { UserDefaults.standard.bool(forKey: "captureSystemAudio") }
 
     /// Sensible per-provider endpoint/model defaults, used by the settings UI.
     static func presetEndpoint(for provider: String) -> String {
