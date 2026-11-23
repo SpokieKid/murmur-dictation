@@ -12,6 +12,8 @@ build/
 *.dmg
 *.zip
 DerivedData/
+Windows/**/bin/
+Windows/**/obj/
 
 # Xcode user data
 xcuserdata/

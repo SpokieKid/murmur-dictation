@@ -1,0 +1,42 @@
+Murmur Windows 0.6.0 · 公开预览版
+
+适用：Windows 10（建议 22H2）或 Windows 11，64 位 Intel / AMD 电脑。
+安装包内置 .NET 运行时，无需单独安装 .NET；不需要管理员权限。
+
+首次使用
+1. 运行 Murmur-0.6.0-Windows-x64-Setup.exe，完成安装。
+2. 打开后，在新手引导中选择麦克风，点击“检查麦克风”。此检查仅在本机录音约一秒，不上传或保存。
+3. 若无法录音，打开“麦克风隐私设置”，开启麦克风访问、允许桌面应用访问麦克风。
+4. 在设置中填写自己的语音识别 API 密钥，确认服务地址、模型与快捷键。公开包不含共享密钥。
+   文字整理是可选功能：填写对应密钥，或关闭该功能。
+5. 在“首次试说”页点击开始或按 Ctrl+Alt+空格，说完后再次按下。出现真实文字后，完成引导。
+6. 关闭引导窗口后，Murmur 留在系统托盘。点击其他应用的输入框，用同一快捷键语音输入。
+
+日常操作
+• 默认快捷键 Ctrl+Alt+空格，按一次开始，再按一次结束。引导中可改用 Ctrl+Shift+空格或 Alt+Shift+空格。
+• 录音或处理时按 Esc 取消。如果 Esc 被其他应用占用，请用录音浮窗的取消按钮。
+• 关闭窗口会留在托盘；右键托盘图标→退出，才会退出软件。
+• 双击托盘图标或再次从开始菜单打开 Murmur，可以回到窗口。
+• 处理期间若切换窗口、移动光标、输入框内容改变，或输入框无法可靠核验，结果会复制到剪贴板，请手动 Ctrl+V。
+• 密码框不自动输入。管理员权限应用可能无法回填，使用手动粘贴即可，不需要提高 Murmur 权限。
+• 首版同一时间处理一段录音，最长 220 秒；处理完成后再录下一段。
+• 本版本录制麦克风，不包含 macOS 版的电脑/会议声音混录。
+
+数据与服务
+• 正式录音会发送到设置中的语音服务；默认实时识别边说边上传，失败时回退批量识别。
+• 开启文字整理时，识别文本也会发送给设置中的语言模型。
+• 不保存音频文件或持久化转录历史。最近一次结果保留在内存中，可从托盘复制。
+• 设置位于 %LOCALAPPDATA%\Murmur\settings.json。自定义密钥使用当前 Windows 用户 DPAPI 加密，不能直接搬到另一用户。
+• 公开预览版不内置服务密钥；模型服务费用由你配置的账户承担。
+• 若返回 FreeTierOnly，充值后还需在百炼关闭对应模型的“免费额度用完即停”。这属于服务商账户设置。
+• 当前安装包未购买 Windows 代码签名证书，Windows 可能显示发布者未知提示。
+
+验收建议
+安装→权限检查→首次试说→记事本回填→录音结束后切换窗口→确认复制提示→Esc 取消→退出重开→卸载。
+请记录 Windows 版本、输入应用名称、错误提示和复现步骤。
+
+English quick start
+Install, choose a microphone and complete the real voice trial. Default shortcut: Ctrl+Alt+Space.
+Tap to start, tap again to finish. Murmur stays in the system tray when its window closes.
+If the original field cannot be verified, text is copied for manual paste. Password fields are never auto-pasted into.
+Open Windows microphone privacy settings if capture fails. The installer bundles the runtime and installs per user.
