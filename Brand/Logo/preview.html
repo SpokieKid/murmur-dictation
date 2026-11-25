@@ -212,7 +212,9 @@
 
       .usage:last-child { border-right: 0; }
       .usage img { width: min(150px, 70%); }
-      .usage.red { background: var(--red); }
+      .usage.light { background: var(--paper); }
+      .usage.light img, .usage.dark img { width: 24px; }
+      .usage.dark img { filter: invert(1); }
       .usage.dark { background: var(--ink); }
       .usage.app img { width: min(220px, 85%); filter: drop-shadow(0 20px 25px rgba(21, 22, 24, .18)); }
 
@@ -339,8 +341,8 @@
         </div>
         <div class="usage-grid">
           <div class="usage app"><img src="murmur-app-icon.svg" alt="Murmur App Icon" /></div>
-          <div class="usage red"><img src="murmur-mark-white.svg" alt="白色 Murmur 标志" /></div>
-          <div class="usage dark"><img src="murmur-mark-white.svg" alt="反白 Murmur 标志" /></div>
+          <div class="usage light"><img src="../../Sources/Murmur/Resources/MomoGlyph.svg" alt="浅色菜单栏的姆姆海豹" /></div>
+          <div class="usage dark"><img src="../../Sources/Murmur/Resources/MomoGlyph.svg" alt="深色菜单栏的姆姆海豹" /></div>
         </div>
       </section>
 

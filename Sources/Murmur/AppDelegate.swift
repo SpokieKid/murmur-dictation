@@ -185,15 +185,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func render(_ state: State) {
         guard let button = statusItem.button else { return }
-        let symbol: String
+        let label: String
         switch state {
-        case .idle: symbol = "mic"
-        case .recording: symbol = "mic.fill"
-        case .working: symbol = "waveform"
+        case .idle:
+            button.image = Momo.glyph
+            label = "Murmur"
+        case .recording:
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: nil)
+            label = L10n.tr("status.recording")
+        case .working:
+            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil)
+            label = L10n.tr("status.working")
         }
-        let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Murmur")
-        image?.isTemplate = (state != .recording)
-        button.image = image
+        button.setAccessibilityLabel(label)
+        button.toolTip = label
         button.contentTintColor = state == .recording ? .systemRed : nil
     }
 
@@ -865,6 +870,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     @objc private func appLanguageChanged() {
+        render(state)
         localizeMainMenu()
         settingsWindow?.title = L10n.tr("app.settings_title")
     }

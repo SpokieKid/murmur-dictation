@@ -48,21 +48,23 @@ enum L10n {
     }
 
     private static var localizedBundle: Bundle {
-        let resources = packageResources
+        let resources = Bundle.murmurResources
         // SwiftPM normalizes localization directory names to lowercase (for
         // example `zh-Hans.lproj` becomes `zh-hans.lproj`) on case-sensitive
         // build volumes, so resolve both spellings explicitly.
         for code in [resolvedLanguageCode, resolvedLanguageCode.lowercased()] {
-            let url = resources.bundleURL.appendingPathComponent("\(code).lproj")
-            if let bundle = Bundle(url: url) { return bundle }
+            if let url = resources.url(forResource: code, withExtension: "lproj"),
+               let bundle = Bundle(url: url) { return bundle }
         }
         return resources
     }
+}
 
+extension Bundle {
     /// In an assembled `.app` the SwiftPM resource bundle lives under
     /// `Contents/Resources`. During `swift run` and tests, `Bundle.module`
     /// points at the build-tree copy instead.
-    private static var packageResources: Bundle {
+    static var murmurResources: Bundle {
         if let resourcesURL = Bundle.main.resourceURL,
            let bundled = Bundle(
                url: resourcesURL.appendingPathComponent("Murmur_Murmur.bundle")

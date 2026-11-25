@@ -1,4 +1,6 @@
 "app.settings_title" = "Murmur 设置";
+"status.recording" = "Murmur · 正在录音";
+"status.working" = "Murmur · 处理中";
 
 "menu.start_stop" = "开始 / 停止听写";
 "menu.recent_transcripts" = "最近转录";

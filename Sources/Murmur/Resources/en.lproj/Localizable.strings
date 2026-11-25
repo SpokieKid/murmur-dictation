@@ -1,4 +1,6 @@
 "app.settings_title" = "Murmur Settings";
+"status.recording" = "Murmur · Recording";
+"status.working" = "Murmur · Processing";
 
 "menu.start_stop" = "Start / Stop Dictation";
 "menu.recent_transcripts" = "Recent Transcripts";

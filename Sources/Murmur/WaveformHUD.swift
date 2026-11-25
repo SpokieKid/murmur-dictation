@@ -163,22 +163,29 @@ private struct WaveformCard: View {
         case .failure, .cancelled:
             Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(item.phase == .cancelled ? Color.gray : Color.red)
+        case .recording where !item.warning:
+            Image(nsImage: Momo.glyph)
+                .renderingMode(.template)
+                .resizable()
+                .frame(width: 18, height: 15)
+                .foregroundStyle(Color(red: 1, green: 0.53, blue: 0.43))
+                .accessibilityHidden(true)
         default:
             Circle()
-                .fill(item.warning ? Color.yellow : (item.phase == .recording ? Color.red : Color.orange))
+                .fill(item.warning ? Color.yellow : Color.orange)
                 .frame(width: 8, height: 8)
         }
     }
 
     private var waveformBars: some View {
-        HStack(alignment: .center, spacing: 2) {
+        HStack(alignment: .center, spacing: 1.5) {
             ForEach(Array(item.levels.enumerated()), id: \.offset) { _, level in
                 Capsule()
                     .fill(Color.white.opacity(0.9))
                     .frame(width: 2.2, height: 4 + level * 20)
             }
         }
-        .frame(width: 82, height: 24)
+        .frame(width: 72, height: 24)
         .animation(.easeOut(duration: 0.1), value: item.levels)
     }
 }

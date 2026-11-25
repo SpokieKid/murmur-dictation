@@ -53,7 +53,7 @@ struct SettingsView: View {
 
     private var asrTab: some View {
         Form {
-            Section(L10n.tr("settings.asr_provider")) {
+            Section {
                 Picker(L10n.tr("settings.format"), selection: $provider) {
                     Text(L10n.tr("settings.dashscope_provider")).tag(Defaults.providerDashScope)
                     Text(L10n.tr("settings.openai_provider")).tag(Defaults.providerOpenAI)
@@ -66,6 +66,14 @@ struct SettingsView: View {
                 SecureField(L10n.tr("settings.api_key"), text: $apiKey)
                 TextField(L10n.tr("settings.model"), text: $model)
                 TextField(L10n.tr("settings.asr_language"), text: $language)
+            } header: {
+                HStack(spacing: 7) {
+                    Image(nsImage: Momo.portrait)
+                        .resizable()
+                        .frame(width: 36, height: 36)
+                        .accessibilityHidden(true)
+                    Text(L10n.tr("settings.asr_provider"))
+                }
             }
             Section {
                 Text(L10n.tr("settings.dashscope_endpoint_hint"))

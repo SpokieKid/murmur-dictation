@@ -23,6 +23,20 @@ if [ -d "$BIN_DIR/Murmur_Murmur.bundle" ]; then
     ditto "$BIN_DIR/Murmur_Murmur.bundle" "$BUNDLE/Contents/Resources/Murmur_Murmur.bundle"
 fi
 
+# Build all Finder and Dock representations from the same portrait.
+ICONSET="$BIN_DIR/Murmur.iconset"
+mkdir -p "$ICONSET"
+for points in 16 32 128 256 512; do
+    for scale in 1 2; do
+        pixels=$((points * scale))
+        suffix=""
+        if [ "$scale" = 2 ]; then suffix="@2x"; fi
+        sips -z "$pixels" "$pixels" Brand/Logo/murmur-app-icon.png \
+            --out "$ICONSET/icon_${points}x${points}${suffix}.png" >/dev/null
+    done
+done
+iconutil -c icns "$ICONSET" -o "$BUNDLE/Contents/Resources/Murmur.icns"
+
 # Prefer a stable signing identity so macOS TCC keeps Accessibility / Input
 # Monitoring / Microphone grants across rebuilds. Developer ID also lets the
 # DMG open on other Macs without the "damaged" Gatekeeper error. Falls back
